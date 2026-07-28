@@ -1,0 +1,15 @@
+# Ignore huge dependency folders anywhere in the project
+node_modules/
+
+# Ignore sensitive environment variables
+.env
+.env.local
+.env.*
+
+# Ignore Next.js frontend build outputs
+.next/
+out/
+
+# Ignore Express backend build outputs
+dist/
+build/
