@@ -4,18 +4,19 @@ import { motion, Variants } from "framer-motion";
 import { Coffee, ShoppingBag } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-// --- Organic Latte Art & Steam ---
+// --- NEW COMPONENT: Organic Latte Art & Steam ---
 function AmbientCoffeeArt({ className, delay = 0 }: { className: string, delay?: number }) {
   const steamLines = [1, 2, 3];
 
   return (
     <div className={`absolute w-72 h-72 opacity-[0.07] pointer-events-none ${className}`}>
-      {/* 1. The Liquid Blob  */}
+      {/* 1. The Liquid Blob (Looks like a coffee spill or latte art) */}
       <motion.div
         className="absolute inset-0 bg-amber-900"
         style={{ borderRadius: "40% 60% 70% 30% / 40% 50% 60% 50%" }}
         animate={{
           rotate: [0, 360],
+          // We slightly shift the shape's radius as it spins to make it feel alive like liquid
           borderRadius: [
             "40% 60% 70% 30% / 40% 50% 60% 50%",
             "60% 40% 30% 70% / 50% 60% 40% 50%",
