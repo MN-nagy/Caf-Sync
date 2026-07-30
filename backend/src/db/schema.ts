@@ -15,6 +15,11 @@ export const drinks = pgTable("drinks", {
   description: text("description"), // e.g., "Espresso and milk..."
   priceInPiastres: integer("price_in_piastres").notNull(), // See note below!
   isOutOfStock: boolean("is_out_of_stock").default(false), // Admin can flip this
+
+  // new
+  originalPriceInPiastres: integer("original_price_in_piastres"),
+  category: varchar("category", { length: 255 }),
+  imageUrl: varchar("image_url", { length: 1000 }),
 });
 
 // 2. The Main Ticket (Orders)
