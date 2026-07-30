@@ -7,7 +7,11 @@ import AuthWrapper from "./AuthWrapper";
 
 const SERVER_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
-export default function PinPad() {
+interface PinPadProps {
+	onSuccess?: () => void;
+}
+
+export default function PinPad({ onSuccess }: PinPadProps) {
 	const [pin, setPin] = useState("");
 	const [error, setError] = useState("");
 	const [loading, setLoading] = useState(false);
@@ -37,10 +41,16 @@ export default function PinPad() {
 					throw new Error(data.message || "Incorrect PIN");
 				}
 
-				router.refresh();
+				// If rendered inside KitchenClient as a modal, trigger onSuccess callback
+				if (onSuccess) {
+					onSuccess();
+				} else {
+					router.refresh();
+				}
 			} catch (err: any) {
 				setError(err.message);
 				setPin(""); // Clear the pad on error
+			} finally {
 				setLoading(false);
 			}
 		}

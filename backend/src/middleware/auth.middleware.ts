@@ -2,8 +2,6 @@ import type { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import type { AuthPayload } from "../types/express.d.ts";
 
-const JWT_SECRET = process.env.JWT_SECRET!;
-
 /**
  * STRICT SHIFT AUTH (Hybrid Double-Lock):
  * Requires BOTH a valid 30-day device token AND an active 24-hour shift PIN token.
@@ -14,6 +12,11 @@ export const requireShift = (
   next: NextFunction,
 ): void => {
   try {
+    const JWT_SECRET = process.env.JWT_SECRET!;
+    if (!JWT_SECRET) {
+      throw new Error("JWT_SECRET is missing in middleware");
+    }
+
     const deviceToken = req.cookies?.deviceToken;
     const shiftToken = req.cookies?.shiftToken;
 
@@ -49,6 +52,8 @@ export const requireShift = (
 
     next();
   } catch (error) {
+    console.error("Middleware Auth Error:", error);
+
     if (error instanceof jwt.TokenExpiredError) {
       res.status(401).json({
         success: false,

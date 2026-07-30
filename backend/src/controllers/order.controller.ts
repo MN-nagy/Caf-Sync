@@ -112,13 +112,14 @@ export const getActiveOrders = async (
   }
 };
 
-export const markOrderComplete = async (
+export const updateOrderStatus = async (
   req: Request,
   res: Response,
   next: NextFunction,
 ): Promise<void> => {
   try {
     const { id } = req.params;
+    const { status } = req.body;
 
     if (!id || typeof id !== "string") {
       res.status(400).json({ success: false, message: "Order ID is required" });
@@ -141,10 +142,10 @@ export const markOrderComplete = async (
 
     const io = req.app.get("io");
     if (io) {
-      io.emit("order:completed", { orderId });
+      io.emit("order:completed", { orderId, status });
     }
 
-    res.json({ success: true, message: `Order #${id} completed` });
+    res.json({ success: true, message: `Order #${id} is now ${status}` });
   } catch (error) {
     next(error);
   }
