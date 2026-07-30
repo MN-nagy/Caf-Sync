@@ -5,6 +5,8 @@ import { createServer } from "http";
 import { Server } from "socket.io";
 import menuRouter from "./routes/menu.route.ts";
 import orderRouter from "./routes/order.route.ts";
+import authRouter from "./routes/auth.route.ts";
+import cookieParser from "cookie-parser";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -20,12 +22,18 @@ export const io = new Server(httpServer, {
 });
 
 // middleware
-app.use(cors()); // Allowing 3000 to talk to here
+app.use(
+  cors({
+    origin: CLIENT_URL,
+    credentials: true,
+  }),
+); // allowing client to talk to here
 app.use(express.json()); // JSON
 
 // API endpoints
 app.use("/api/menu", menuRouter);
 app.use("/api/orders", orderRouter);
+app.use("/api/auth", authRouter);
 
 // websocket
 app.set("io", io); // making io accessable via req.app.get("io")

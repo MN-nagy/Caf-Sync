@@ -1,5 +1,6 @@
 import { db } from "./index.ts";
-import { drinks } from "./schema.ts";
+import { drinks, kitchenSettings } from "./schema.ts";
+import bcrypt from "bcrypt";
 
 async function seed() {
   console.log("🌱 Seeding database...");
@@ -36,8 +37,23 @@ async function seed() {
 
   try {
     // Insert the drinks into the database
-    await db.insert(drinks).values(menuItems);
-    console.log("✅ Menu successfully added to Neon!");
+    // await db.insert(drinks).values(menuItems);
+
+    console.log("🔒 Securing admin credentials...");
+
+    // We use a "salt rounds" value of 10. This dictates how many times the data
+    // goes through the hashing algorithm. 10 is the industry standard for speed vs security.
+    const passwordHash = await bcrypt.hash("Admin2026!", 10);
+    const pinHash = await bcrypt.hash("1234", 10);
+
+    await db.insert(kitchenSettings).values({
+      kitchenEmail: "manager@caf.com",
+      kitchenPassword: passwordHash,
+      kitchenPinHash: pinHash,
+    });
+
+    console.log("✅ Admin account created!");
+    console.log("Email: manager@caf.com | Pass: Admin2026! | PIN: 1234");
   } catch (error) {
     console.error("❌ Error seeding database:", error);
   }

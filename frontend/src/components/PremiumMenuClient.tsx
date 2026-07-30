@@ -72,7 +72,7 @@ export default function PremiumMenuClient({
 			isPickup: orderType === 'pickup',
 			tableNumber,
 			totalPiastres,
-			items: cart.map(item => ({ drinkId: item.id, quantity: item.quantity }))
+			items: cart.map(item => ({ drinkId: item.id, quantity: item.quantity, drinkName: item.name, }))
 		};
 
 		try {
