@@ -1,29 +1,62 @@
+import type { Request, Response, NextFunction } from "express";
 import express from "express";
 import cors from "cors";
-import { db } from "./db/index.ts";
-import { drinks } from "./db/schema.ts";
+import { createServer } from "http";
+import { Server } from "socket.io";
+import menuRouter from "./routes/menu.route.ts";
+import orderRouter from "./routes/order.route.ts";
 
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
+const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:3000";
+
+const httpServer = createServer(app);
+
+export const io = new Server(httpServer, {
+  cors: {
+    origin: CLIENT_URL,
+    methods: ["GET", "POST"],
+  },
+});
 
 // middleware
-app.use(cors()); // to allow Next.js "on port 3000" to talk to this server
-app.use(express.json()); // Add JSON understanding to the server
+app.use(cors()); // Allowing 3000 to talk to here
+app.use(express.json()); // JSON
 
 // API endpoints
+app.use("/api/menu", menuRouter);
+app.use("/api/orders", orderRouter);
 
-app.get("/api/menu", async (_, res) => {
-  try {
-    console.log("fetching from db..");
-    const menu = await db.select().from(drinks);
-    res.json(menu);
-  } catch (error) {
-    console.error("fetch faild", error);
-    res.status(500).json({ error: "Faild to fetch menu" });
-  }
+// websocket
+app.set("io", io); // making io accessable via req.app.get("io")
+
+io.on("connection", (socket) => {
+  console.log(`connected to websocket: ${socket.id}`);
+
+  socket.on("disconnect", () => {
+    console.log(`User disconnected: ${socket.id}`);
+  });
 });
 
 // start server
-app.listen(PORT, () => {
-  console.log(`Connected To ${PORT}`);
+function startServer() {
+  try {
+    httpServer.listen(PORT, () => {
+      console.log(`Server and Websocket live on ${PORT}`);
+    });
+  } catch (error) {
+    console.error(`Failed to connect to ${PORT}`, error);
+    process.exit(1);
+  }
+}
+
+// error handeler
+app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+  console.error("Error", err.message, err.stack);
+  res.status(500).json({
+    status: "error",
+    message: "Something went wrong, please try again later",
+  });
 });
+
+startServer();

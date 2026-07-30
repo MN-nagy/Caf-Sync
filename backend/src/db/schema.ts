@@ -21,6 +21,7 @@ export const orders = pgTable("orders", {
   id: serial("id").primaryKey(), // e.g., Order #1042
   tableNumber: integer("table_number"), // Null if it's a pickup order
   isPickup: boolean("is_pickup").default(false), // True if passing by
+  totalPiastres: integer("total_piastres").notNull(),
   status: text("status", {
     enum: ["pending_approval", "active", "completed"],
   }).default("active"),
