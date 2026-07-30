@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, ChevronUp, X } from "lucide-react";
+import { ArrowLeft, ChevronUp } from "lucide-react";
 import { useRouter } from "next/navigation";
 import CheckoutFlow from "./CheckoutFlow";
 import { AnimatePresence } from "framer-motion";
@@ -173,7 +173,7 @@ export default function MenuClient({
 					animate={{ y: 0 }}
 					className="fixed bottom-0 left-0 right-0 p-6 z-50 pointer-events-none"
 				>
-					<div className="max-w-lg mx-auto bg-amber-900 text-white p-4 rounded-[2rem] shadow-2xl pointer-events-auto overflow-hidden">
+					<div className="max-w-lg mx-auto bg-amber-900 text-white p-4 rounded-4xl shadow-2xl pointer-events-auto overflow-hidden">
 
 						{/* SLIDING CART DETAILS */}
 						<AnimatePresence>
