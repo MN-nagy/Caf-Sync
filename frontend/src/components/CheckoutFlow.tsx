@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Coffee, CheckCircle2, Phone, ArrowRight, X, Edit2 } from "lucide-react";
+import { Coffee, CheckCircle2, Phone, ArrowRight, X, Edit2, AlertCircle, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 type CartItem = { drinkId: number; drinkName: string; quantity: number };
@@ -17,14 +17,14 @@ interface CheckoutFlowProps {
 
 export default function CheckoutFlow({ cartItems, totalPiastres, orderType, tableNumber, onBack }: CheckoutFlowProps) {
 	const [phone, setPhone] = useState("");
-	const [phoneError, setPhoneError] = useState(""); // NEW: Error state
+	const [phoneError, setPhoneError] = useState("");
 	const [step, setStep] = useState<"form" | "processing" | "ticket" | "success">(
 		orderType === "pickup" ? "form" : "processing"
 	);
 	const [loading, setLoading] = useState(false);
 	const [orderId, setOrderId] = useState<number | null>(null);
-	const router = useRouter();
 
+	const router = useRouter();
 	const SERVER_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
 	// NEW: Egyptian Phone Validation
@@ -33,7 +33,7 @@ export default function CheckoutFlow({ cartItems, totalPiastres, orderType, tabl
 		return phoneRegex.test(number);
 	};
 
-	const handlePhoneSubmit = async (e?: React.FormEvent) => {
+	const handlePhoneSubmit = async (e?: React.SubmitEvent<HTMLFormElement>) => {
 		if (e) e.preventDefault();
 		setPhoneError("");
 
@@ -127,7 +127,7 @@ export default function CheckoutFlow({ cartItems, totalPiastres, orderType, tabl
 							key="form"
 							initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -50 }}
 							onSubmit={handlePhoneSubmit}
-							className="w-full bg-white border border-stone-200 p-8 rounded-[2rem] shadow-xl"
+							className="w-full bg-white border border-stone-200 p-8 rounded-4xl shadow-xl"
 						>
 							<h2 className="text-3xl font-black text-amber-900 tracking-tight mb-2">
 								{orderId ? "Update Number" : "Almost ready"}
@@ -178,7 +178,7 @@ export default function CheckoutFlow({ cartItems, totalPiastres, orderType, tabl
 					{step === "ticket" && (
 						<motion.div key="ticket" initial={{ opacity: 0, scale: 0.9, y: 30 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, y: -50 }} className="w-full space-y-4">
 
-							<div className="bg-white border border-stone-200 rounded-[2rem] p-6 shadow-xl relative overflow-hidden">
+							<div className="bg-white border border-stone-200 rounded-4xl p-6 shadow-xl relative overflow-hidden">
 								<div className="absolute top-0 left-0 w-full h-1 bg-stone-200" />
 								<div className="flex justify-between items-center mb-4">
 									<h3 className="text-sm font-bold text-stone-400 uppercase tracking-widest">Your Order</h3>
@@ -215,8 +215,8 @@ export default function CheckoutFlow({ cartItems, totalPiastres, orderType, tabl
 								</button>
 							</div>
 
-							<div className="bg-white border border-stone-200 rounded-[2rem] p-8 shadow-xl relative overflow-hidden">
-								<div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-600 to-emerald-600" />
+							<div className="bg-white border border-stone-200 rounded-4xl p-8 shadow-xl relative overflow-hidden">
+								<div className="absolute top-0 left-0 w-full h-1 bg-linear-to-r from-amber-600 to-emerald-600" />
 
 								<div className="text-center mb-6">
 									<h2 className="text-2xl font-black mt-2 text-amber-900">Awaiting Payment</h2>
@@ -244,7 +244,8 @@ export default function CheckoutFlow({ cartItems, totalPiastres, orderType, tabl
 
 					{/* STEP 4: SUCCESS OVERLAY */}
 					{step === "success" && (
-						<motion.div key="success" initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} className="text-center flex flex-col items-center bg-white p-10 rounded-[2rem] border border-stone-200 shadow-xl">
+						<motion.div key="success" initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} className="text-center flex flex-col items-center bg-white p-10 rounded-4xl border border-stone-200 shadow-xl">
+
 							<div className="w-24 h-24 bg-emerald-50 border border-emerald-100 rounded-full flex items-center justify-center mb-6">
 								<Coffee className="text-emerald-600" size={40} />
 							</div>

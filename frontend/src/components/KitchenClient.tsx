@@ -5,6 +5,7 @@ import { io, Socket } from "socket.io-client";
 import { motion, AnimatePresence } from "framer-motion";
 import { Coffee, ShoppingBag, CheckCircle, Search, Bell, XCircle, ArrowRight, Check, Undo2, AlertCircle } from "lucide-react";
 import PinPad from "./PinPad";
+import { Toaster, toast } from 'sonner';
 
 export type OrderItem = { drinkName: string; quantity: number };
 
@@ -31,9 +32,6 @@ export default function KitchenClient({ initialOrders }: { initialOrders: Incomi
 	const [isPinLocked, setIsPinLocked] = useState(false);
 	const [pendingAction, setPendingAction] = useState<(() => Promise<void>) | null>(null);
 
-	// Custom Toast System
-	const [toasts, setToasts] = useState<{ id: number; message: string }[]>([]);
-
 	// Seen Tracking (For Smart Notification Badges)
 	const [seenOrders, setSeenOrders] = useState<{ tables: Set<number>, pickups: Set<number>, ready: Set<number> }>({
 		tables: new Set(), pickups: new Set(), ready: new Set()
@@ -45,12 +43,6 @@ export default function KitchenClient({ initialOrders }: { initialOrders: Incomi
 	const [confirmLabel, setConfirmLabel] = useState("");
 
 	const SERVER_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
-
-	const addToast = (msg: string) => {
-		const id = Date.now();
-		setToasts((prev) => [...prev, { id, message: msg }]);
-		setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3000);
-	};
 
 	// --- WEBSOCKETS ---
 	useEffect(() => {
@@ -139,11 +131,12 @@ export default function KitchenClient({ initialOrders }: { initialOrders: Incomi
 			}
 			if (!res.ok) throw new Error("Update failed");
 
-			addToast(`Order #${orderId} ${actionLabel.toLowerCase()}`);
+
+			toast.success(`Order #${orderId} ${actionLabel.toLowerCase()}`);
 		} catch (error) {
 			console.error(error);
 			setOrders(previousOrders); // Rollback
-			addToast(`Failed to update Order #${orderId}`);
+			toast.error(`Failed to update Order #${orderId}`);
 		}
 	};
 
@@ -212,17 +205,7 @@ export default function KitchenClient({ initialOrders }: { initialOrders: Incomi
 	return (
 		<div className="min-h-screen bg-stone-950 text-stone-100 p-6 md:p-10 font-sans relative overflow-x-hidden">
 
-			{/* TOASTS PORTAL */}
-			<div className="fixed top-6 right-6 z-[100] flex flex-col gap-3 pointer-events-none">
-				<AnimatePresence>
-					{toasts.map((toast) => (
-						<motion.div key={toast.id} initial={{ opacity: 0, x: 50, scale: 0.9 }} animate={{ opacity: 1, x: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }} className="bg-stone-800 border border-stone-700 text-stone-100 px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 font-bold pointer-events-auto">
-							<CheckCircle size={20} className="text-emerald-500" />
-							{toast.message}
-						</motion.div>
-					))}
-				</AnimatePresence>
-			</div>
+			<Toaster richColors position="top-right" theme="dark" />
 
 			<AnimatePresence>
 				{isPinLocked && (
@@ -284,7 +267,7 @@ export default function KitchenClient({ initialOrders }: { initialOrders: Incomi
 				{activeTab === "pickups" && (
 					<div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
 						{/* LEFT SIDE: PENDING */}
-						<div className="bg-stone-900/50 rounded-[2rem] border border-stone-800 p-6">
+						<div className="bg-stone-900/50 rounded-4xl border border-stone-800 p-6">
 							<h2 className="text-xl font-black text-amber-500 mb-6 flex items-center gap-2"><Bell size={24} /> Verify Payment</h2>
 							<div className="relative mb-6">
 								<Search className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-500" size={18} />
@@ -307,7 +290,7 @@ export default function KitchenClient({ initialOrders }: { initialOrders: Incomi
 						</div>
 
 						{/* RIGHT SIDE: PREPARING */}
-						<div className="bg-stone-900/50 rounded-[2rem] border border-stone-800 p-6">
+						<div className="bg-stone-900/50 rounded-4xl border border-stone-800 p-6">
 							<h2 className="text-xl font-black text-emerald-500 mb-6 flex items-center gap-2"><Coffee size={24} /> Preparing</h2>
 							<div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[70vh] overflow-y-auto pr-2">
 								<AnimatePresence>
