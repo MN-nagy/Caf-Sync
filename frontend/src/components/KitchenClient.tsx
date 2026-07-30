@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { io, Socket } from "socket.io-client";
 import { motion, AnimatePresence } from "framer-motion";
 import { Coffee, ShoppingBag, CheckCircle } from "lucide-react";
+import PinPad from "./PinPad"; // Import your existing PinPad
 
 export type OrderItem = {
 	drinkName: string;
@@ -18,22 +19,25 @@ export type IncomingOrder = {
 };
 
 export default function KitchenClient({ initialOrders }: { initialOrders: IncomingOrder[] }) {
-	// 1. Initialize state with the secure server-fetched data
 	const [orders, setOrders] = useState<IncomingOrder[]>(initialOrders);
 	const [isConnected, setIsConnected] = useState(false);
+
+	// Modal state for shift PIN expiration
+	const [isPinLocked, setIsPinLocked] = useState(false);
+	const [pendingAction, setPendingAction] = useState<(() => Promise<void>) | null>(null);
 
 	const SERVER_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
 	useEffect(() => {
-		const socket: Socket = io(SERVER_URL);
+		const socket: Socket = io(SERVER_URL, {
+			withCredentials: true,
+		});
 
 		socket.on("connect", () => setIsConnected(true));
 		socket.on("disconnect", () => setIsConnected(false));
 
-		// 2. Listen for NEW orders and add them to the queue
 		socket.on("order:created", (newOrder: IncomingOrder) => {
 			setOrders((prev) => {
-				// Prevent duplicate keys if order was already added
 				if (prev.some((o) => o.orderId === newOrder.orderId)) return prev;
 				return [...prev, newOrder];
 			});
@@ -48,39 +52,74 @@ export default function KitchenClient({ initialOrders }: { initialOrders: Incomi
 		};
 	}, [SERVER_URL]);
 
-	// 3. Update the database when the barista finishes the drink
 	const markComplete = async (orderId: number) => {
+		const existingOrder = orders.find((o) => o.orderId === orderId);
+
+		// Remove from UI instantly (Optimistic UI)
+		setOrders((prev) => prev.filter((o) => o.orderId !== orderId));
+
 		try {
+			const res = await fetch(`${SERVER_URL}/api/orders/${orderId}/complete`, {
+				method: "PATCH",
+				credentials: "include",
+			});
 
-			const existingOrder = orders.find((o) => o.orderId === orderId);
-
-			// Remove from UI instantly for a snappy experience (Optimistic UI)
-			setOrders((prev) => prev.filter((o) => o.orderId !== orderId));
-
-			try {
-				const res = await fetch(`${SERVER_URL}/api/orders/${orderId}/complete`, {
-					method: "PATCH",
-					credentials: "include",
-				});
-
-				if (!res.ok) {
-					throw new Error("Server responded with error status");
-				}
-			} catch (error) {
-				console.error("Failed to mark complete, rolling back UI", error);
-				// 3. Rollback: Restore the order to state if the API call failed
+			// If the 24-hour shift token expired, trigger the PIN Modal
+			if (res.status === 401) {
+				// Rollback: restore order ticket
 				if (existingOrder) {
 					setOrders((prev) => [...prev, existingOrder]);
 				}
-				alert("Failed to complete order due to a network issue. Please try again.");
+				// Save action to retry automatically after entering PIN
+				setPendingAction(() => () => markComplete(orderId));
+				setIsPinLocked(true);
+				return;
+			}
+
+			if (!res.ok) {
+				throw new Error("Server responded with error status");
 			}
 		} catch (error) {
-			console.error("Failed to mark complete", error);
+			console.error("Failed to mark complete, rolling back UI", error);
+			if (existingOrder) {
+				setOrders((prev) => [...prev, existingOrder]);
+			}
+		}
+	};
+
+	const handlePinSuccess = async () => {
+		setIsPinLocked(false);
+
+		// Automatically retry completing the drink that was blocked by 401
+		if (pendingAction) {
+			await pendingAction();
+			setPendingAction(null);
 		}
 	};
 
 	return (
-		<div className="min-h-screen bg-stone-900 text-stone-100 p-6 md:p-10 font-sans">
+		<div className="min-h-screen bg-stone-900 text-stone-100 p-6 md:p-10 font-sans relative">
+			{/* PIN Modal Backdrop Overlay */}
+			<AnimatePresence>
+				{isPinLocked && (
+					<motion.div
+						initial={{ opacity: 0 }}
+						animate={{ opacity: 1 }}
+						exit={{ opacity: 0 }}
+						className="fixed inset-0 z-50 bg-stone-950/90 backdrop-blur-md flex items-center justify-center p-4"
+					>
+						<motion.div
+							initial={{ scale: 0.9, opacity: 0 }}
+							animate={{ scale: 1, opacity: 1 }}
+							exit={{ scale: 0.9, opacity: 0 }}
+							className="w-full max-w-md"
+						>
+							<PinPad onSuccess={handlePinSuccess} />
+						</motion.div>
+					</motion.div>
+				)}
+			</AnimatePresence>
+
 			<header className="flex justify-between items-center mb-10 pb-6 border-b border-stone-800">
 				<div>
 					<h1 className="text-3xl font-black tracking-tight text-amber-100 flex items-center gap-3">
@@ -130,7 +169,6 @@ export default function KitchenClient({ initialOrders }: { initialOrders: Incomi
 										Order Details
 									</p>
 
-									{/* Map through the actual drinks! */}
 									<ul className="space-y-3">
 										{order.items?.map((item, index) => (
 											<li key={index} className="flex justify-between items-center text-stone-200 font-medium text-lg">

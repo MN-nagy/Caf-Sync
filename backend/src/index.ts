@@ -18,6 +18,7 @@ export const io = new Server(httpServer, {
   cors: {
     origin: CLIENT_URL,
     methods: ["GET", "POST"],
+    credentials: true,
   },
 });
 
@@ -29,6 +30,7 @@ app.use(
   }),
 ); // allowing client to talk to here
 app.use(express.json()); // JSON
+app.use(cookieParser());
 
 // API endpoints
 app.use("/api/menu", menuRouter);
