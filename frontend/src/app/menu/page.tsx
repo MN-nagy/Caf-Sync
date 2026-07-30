@@ -1,4 +1,4 @@
-import PremiumMenuClient from "@/components/PremiumMenuClient";
+import MenuClient from "@/components/MenuClient";
 
 // Define the shape of Next.js page props
 type Props = {
@@ -32,7 +32,7 @@ export default async function MenuPage({ searchParams }: Props) {
 	return (
 		<main className="min-h-screen bg-stone-100 font-sans selection:bg-emerald-200">
 			{/* 4. Pass the data and the URL context to our interactive client UI */}
-			<PremiumMenuClient drinks={drinks} orderType={orderType} tableNumber={tableNumber} />
+			<MenuClient drinks={drinks} orderType={orderType} tableNumber={tableNumber} />
 		</main>
 	);
 }
