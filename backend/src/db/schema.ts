@@ -39,3 +39,11 @@ export const orderItems = pgTable("order_items", {
     .notNull(), // Links to the Drink Catalog
   quantity: integer("quantity").notNull().default(1),
 });
+
+export const kitchenSettings = pgTable("kitchen_settings", {
+  id: serial("id").primaryKey(),
+  kitchenEmail: text("kitchen_email").notNull().unique(),
+  kitchenPassword: text("kitchen__password_hash").notNull(), // The meat-grinder version of the password
+  kitchenPinHash: text("kitchen_pin_hash").notNull(), // The meat-grinder version of the 4-digit PIN
+  updatedAt: timestamp("updated_at").defaultNow(),
+});

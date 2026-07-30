@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
-import { orders, orderItems } from "../db/schema.ts";
+import { drinks, orders, orderItems } from "../db/schema.ts";
 import { db } from "../db/index.ts";
 import { eq, asc } from "drizzle-orm";
 
@@ -68,19 +68,44 @@ export const getActiveOrders = async (
   next: NextFunction,
 ): Promise<void> => {
   try {
-    const activeOrders = await db
-      .select()
+    // 1. The Relational Join: Combine all 3 tables
+    const rows = await db
+      .select({
+        orderId: orders.id,
+        tableNumber: orders.tableNumber,
+        isPickup: orders.isPickup,
+        drinkName: drinks.name,
+        quantity: orderItems.quantity,
+      })
       .from(orders)
+      .leftJoin(orderItems, eq(orders.id, orderItems.orderId))
+      .leftJoin(drinks, eq(orderItems.drinkId, drinks.id))
       .where(eq(orders.status, "active"))
       .orderBy(asc(orders.createdAt));
 
-    // Map them to match our frontend's IncomingOrder type
-    const formattedOrders = activeOrders.map((order) => ({
-      orderId: order.id,
-      tableNumber: order.tableNumber,
-      isPickup: order.isPickup,
-    }));
+    const ordersMap = new Map();
 
+    for (const row of rows) {
+      if (!ordersMap.has(row.orderId)) {
+        ordersMap.set(row.orderId, {
+          orderId: row.orderId,
+          tableNumber: row.tableNumber,
+          isPickup: row.isPickup,
+          items: [],
+        });
+      }
+
+      // If the order has a drink attached, push it into the array
+      if (row.drinkName) {
+        ordersMap.get(row.orderId).items.push({
+          drinkName: row.drinkName,
+          quantity: row.quantity,
+        });
+      }
+    }
+
+    // Convert the Map back into a standard array for the frontend
+    const formattedOrders = Array.from(ordersMap.values());
     res.status(200).json(formattedOrders);
   } catch (error) {
     next(error);

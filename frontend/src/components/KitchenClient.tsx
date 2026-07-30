@@ -3,12 +3,18 @@
 import { useEffect, useState } from "react";
 import { io, Socket } from "socket.io-client";
 import { motion, AnimatePresence } from "framer-motion";
-import { Coffee, ShoppingBag, CheckCircle, Bell } from "lucide-react";
+import { Coffee, ShoppingBag, CheckCircle } from "lucide-react";
+
+export type OrderItem = {
+	drinkName: string;
+	quantity: number;
+};
 
 export type IncomingOrder = {
 	orderId: number;
 	tableNumber: number | null;
 	isPickup: boolean;
+	items: OrderItem[];
 };
 
 export default function KitchenClient({ initialOrders }: { initialOrders: IncomingOrder[] }) {
@@ -54,6 +60,7 @@ export default function KitchenClient({ initialOrders }: { initialOrders: Incomi
 			try {
 				const res = await fetch(`${SERVER_URL}/api/orders/${orderId}/complete`, {
 					method: "PATCH",
+					credentials: "include",
 				});
 
 				if (!res.ok) {
@@ -118,12 +125,24 @@ export default function KitchenClient({ initialOrders }: { initialOrders: Incomi
 									</div>
 								</div>
 
-								<div className="my-6 p-4 bg-stone-900/40 rounded-2xl border border-stone-700/50">
-									<p className="text-xs text-stone-400 font-medium uppercase tracking-wider mb-1">Status</p>
-									<p className="text-emerald-400 font-bold text-lg flex items-center gap-2">
-										<Bell size={18} className="animate-bounce" />
-										Preparing Drinks...
+								<div className="my-4 p-4 bg-stone-900/40 rounded-2xl border border-stone-700/50 grow">
+									<p className="text-xs text-stone-400 font-medium uppercase tracking-wider mb-3">
+										Order Details
 									</p>
+
+									{/* Map through the actual drinks! */}
+									<ul className="space-y-3">
+										{order.items?.map((item, index) => (
+											<li key={index} className="flex justify-between items-center text-stone-200 font-medium text-lg">
+												<span className="flex items-center gap-3">
+													<span className="bg-amber-500 text-stone-900 px-2 py-0.5 rounded-md font-black text-sm">
+														{item.quantity}x
+													</span>
+													{item.drinkName}
+												</span>
+											</li>
+										))}
+									</ul>
 								</div>
 							</div>
 
