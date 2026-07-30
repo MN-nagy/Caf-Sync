@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import { drinks, orders, orderItems } from "../db/schema.ts";
 import { db } from "../db/index.ts";
-import { eq, asc } from "drizzle-orm";
+import { eq, asc, inArray } from "drizzle-orm";
 
 export const addOrder = async (
   req: Request,
@@ -9,7 +9,8 @@ export const addOrder = async (
   next: NextFunction,
 ): Promise<void> => {
   try {
-    const { isPickup, tableNumber, items, totalPiastres } = req.body;
+    const { isPickup, tableNumber, items, totalPiastres, customerPhone } =
+      req.body;
 
     if (!Array.isArray(items) || items.length === 0) {
       res.status(400).json({
@@ -26,7 +27,8 @@ export const addOrder = async (
           tableNumber: tableNumber ? parseInt(tableNumber) : null,
           isPickup,
           totalPiastres,
-          // status is defaulted to "Active"
+          customerPhone: isPickup ? customerPhone : null,
+          status: isPickup ? "pending" : "active",
         })
         .returning({ id: orders.id });
 
@@ -52,6 +54,8 @@ export const addOrder = async (
         orderId: generatedOrderId,
         tableNumber,
         isPickup,
+        customerPhone,
+        status: isPickup ? "pending" : "active",
         items,
       });
     }
@@ -68,19 +72,20 @@ export const getActiveOrders = async (
   next: NextFunction,
 ): Promise<void> => {
   try {
-    // 1. The Relational Join: Combine all 3 tables
     const rows = await db
       .select({
         orderId: orders.id,
         tableNumber: orders.tableNumber,
         isPickup: orders.isPickup,
+        status: orders.status,
+        customerPhone: orders.customerPhone,
         drinkName: drinks.name,
         quantity: orderItems.quantity,
       })
       .from(orders)
       .leftJoin(orderItems, eq(orders.id, orderItems.orderId))
       .leftJoin(drinks, eq(orderItems.drinkId, drinks.id))
-      .where(eq(orders.status, "active"))
+      .where(inArray(orders.status, ["pending", "active", "ready"]))
       .orderBy(asc(orders.createdAt));
 
     const ordersMap = new Map();
@@ -91,6 +96,8 @@ export const getActiveOrders = async (
           orderId: row.orderId,
           tableNumber: row.tableNumber,
           isPickup: row.isPickup,
+          customerPhone: row.customerPhone,
+          status: row.status,
           items: [],
         });
       }
@@ -137,15 +144,47 @@ export const updateOrderStatus = async (
 
     await db
       .update(orders)
-      .set({ status: "completed" })
+      .set({ status: status })
       .where(eq(orders.id, orderId));
 
     const io = req.app.get("io");
     if (io) {
-      io.emit("order:completed", { orderId, status });
+      io.emit("order:updated", { orderId, status });
     }
 
     res.json({ success: true, message: `Order #${id} is now ${status}` });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateOrderPhone = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { customerPhone } = req.body;
+
+    if (!id || typeof id !== "string") {
+      res.status(400).json({ success: false, message: "Order ID is required" });
+      return;
+    }
+
+    const orderId = parseInt(id, 10);
+    if (isNaN(orderId) || !customerPhone) {
+      res.status(400).json({ success: false, message: "Invalid data" });
+      return;
+    }
+
+    // Update just the phone number in the DB
+    await db
+      .update(orders)
+      .set({ customerPhone })
+      .where(eq(orders.id, orderId));
+
+    res.json({ success: true, message: "Phone updated" });
   } catch (error) {
     next(error);
   }

@@ -5,6 +5,7 @@ import {
   integer,
   timestamp,
   boolean,
+  varchar,
 } from "drizzle-orm/pg-core";
 
 // 1. The Menu (Drinks)
@@ -23,8 +24,9 @@ export const orders = pgTable("orders", {
   isPickup: boolean("is_pickup").default(false), // True if passing by
   totalPiastres: integer("total_piastres").notNull(),
   status: text("status", {
-    enum: ["pending_approval", "active", "completed"],
+    enum: ["pending", "active", "ready", "completed"],
   }).default("active"),
+  customerPhone: varchar("customer_phone", { length: 20 }),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
