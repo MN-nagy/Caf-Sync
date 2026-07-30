@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { io, Socket } from "socket.io-client";
 import { motion, AnimatePresence } from "framer-motion";
-import { Coffee, ShoppingBag, CheckCircle, Search, Bell, XCircle, ArrowRight, Check } from "lucide-react";
+import { Coffee, ShoppingBag, CheckCircle, Search, Bell, XCircle, ArrowRight, Check, Undo2, AlertCircle } from "lucide-react";
 import PinPad from "./PinPad";
 
 export type OrderItem = { drinkName: string; quantity: number };
@@ -21,13 +21,36 @@ export default function KitchenClient({ initialOrders }: { initialOrders: Incomi
 	const [orders, setOrders] = useState<IncomingOrder[]>(initialOrders);
 	const [isConnected, setIsConnected] = useState(false);
 	const [activeTab, setActiveTab] = useState<"tables" | "pickups" | "ready">("pickups");
-	const [searchQuery, setSearchQuery] = useState("");
 
-	// Auth / PIN State
+	// Search States
+	const [searchPickups, setSearchPickups] = useState("");
+	const [searchTables, setSearchTables] = useState("");
+	const [searchReady, setSearchReady] = useState("");
+
+	// UI States
 	const [isPinLocked, setIsPinLocked] = useState(false);
 	const [pendingAction, setPendingAction] = useState<(() => Promise<void>) | null>(null);
 
+	// Custom Toast System
+	const [toasts, setToasts] = useState<{ id: number; message: string }[]>([]);
+
+	// Seen Tracking (For Smart Notification Badges)
+	const [seenOrders, setSeenOrders] = useState<{ tables: Set<number>, pickups: Set<number>, ready: Set<number> }>({
+		tables: new Set(), pickups: new Set(), ready: new Set()
+	});
+
+	// Action Confirmation System
+	const [confirmId, setConfirmId] = useState<number | null>(null);
+	const [confirmTarget, setConfirmTarget] = useState<string | null>(null);
+	const [confirmLabel, setConfirmLabel] = useState("");
+
 	const SERVER_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+
+	const addToast = (msg: string) => {
+		const id = Date.now();
+		setToasts((prev) => [...prev, { id, message: msg }]);
+		setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3000);
+	};
 
 	// --- WEBSOCKETS ---
 	useEffect(() => {
@@ -50,11 +73,50 @@ export default function KitchenClient({ initialOrders }: { initialOrders: Incomi
 		return () => { socket.disconnect(); };
 	}, [SERVER_URL]);
 
-	// --- STATUS ENGINE ---
-	const changeOrderStatus = async (orderId: number, newStatus: string) => {
-		const previousOrders = [...orders]; // Save state for rollback
+	// --- DERIVED STATE ---
+	const tableOrders = orders.filter((o) => !o.isPickup && o.status === "active");
+	const pendingPickups = orders.filter((o) => o.isPickup && o.status === "pending");
+	const activePickups = orders.filter((o) => o.isPickup && o.status === "active");
+	const readyOrders = orders.filter((o) => o.isPickup && o.status === "ready");
 
-		// Optimistic UI Update (Makes it feel instant)
+	// Search Filters
+	const filteredTables = tableOrders.filter((o) => o.orderId.toString().includes(searchTables) || (o.tableNumber?.toString().includes(searchTables)));
+	const filteredPickups = pendingPickups.filter((o) => o.orderId.toString().includes(searchPickups) || (o.customerPhone && o.customerPhone.includes(searchPickups)));
+	const filteredReady = readyOrders.filter((o) => o.orderId.toString().includes(searchReady) || (o.customerPhone && o.customerPhone.includes(searchReady)));
+
+	// --- SMART BADGES ---
+	// When a tab is active, instantly mark all current orders in that tab as "seen"
+	useEffect(() => {
+		setSeenOrders((prev) => {
+			const next = { tables: new Set(prev.tables), pickups: new Set(prev.pickups), ready: new Set(prev.ready) };
+			if (activeTab === "tables") tableOrders.forEach((o) => next.tables.add(o.orderId));
+			if (activeTab === "pickups") pendingPickups.forEach((o) => next.pickups.add(o.orderId));
+			if (activeTab === "ready") readyOrders.forEach((o) => next.ready.add(o.orderId));
+			return next;
+		});
+	}, [activeTab, orders.length]); // Re-run when tab changes or total orders changes
+
+	const unreadTables = tableOrders.filter((o) => !seenOrders.tables.has(o.orderId)).length;
+	const unreadPickups = pendingPickups.filter((o) => !seenOrders.pickups.has(o.orderId)).length;
+	const unreadReady = readyOrders.filter((o) => !seenOrders.ready.has(o.orderId)).length;
+
+	// --- STATUS ENGINE ---
+	const triggerConfirm = (id: number, target: string, label: string) => {
+		setConfirmId(id); setConfirmTarget(target); setConfirmLabel(label);
+	};
+
+	const executeStatusChange = async () => {
+		if (!confirmId || !confirmTarget) return;
+		const orderId = confirmId;
+		const newStatus = confirmTarget;
+		const actionLabel = confirmLabel;
+
+		// Reset confirm state
+		setConfirmId(null); setConfirmTarget(null); setConfirmLabel("");
+
+		const previousOrders = [...orders];
+
+		// Optimistic UI
 		if (newStatus === "completed" || newStatus === "cancelled") {
 			setOrders((prev) => prev.filter((o) => o.orderId !== orderId));
 		} else {
@@ -71,38 +133,32 @@ export default function KitchenClient({ initialOrders }: { initialOrders: Incomi
 
 			if (res.status === 401) {
 				setOrders(previousOrders); // Rollback
-				setPendingAction(() => () => changeOrderStatus(orderId, newStatus));
+				setPendingAction(() => () => changeStatusBypassConfirm(orderId, newStatus, actionLabel));
 				setIsPinLocked(true);
 				return;
 			}
-			if (!res.ok) throw new Error("Status update failed");
+			if (!res.ok) throw new Error("Update failed");
+
+			addToast(`Order #${orderId} ${actionLabel.toLowerCase()}`);
 		} catch (error) {
 			console.error(error);
-			setOrders(previousOrders); // Rollback on error
+			setOrders(previousOrders); // Rollback
+			addToast(`Failed to update Order #${orderId}`);
 		}
+	};
+
+	// Helper for when PIN pad resumes an action (skips the confirm click)
+	const changeStatusBypassConfirm = async (orderId: number, newStatus: string, label: string) => {
+		setConfirmId(orderId); setConfirmTarget(newStatus); setConfirmLabel(label);
+		await executeStatusChange();
 	};
 
 	const handlePinSuccess = async () => {
 		setIsPinLocked(false);
-		if (pendingAction) {
-			await pendingAction();
-			setPendingAction(null);
-		}
+		if (pendingAction) { await pendingAction(); setPendingAction(null); }
 	};
 
-	// --- DERIVED STATE (The Magic Filtering) ---
-	const tableOrders = orders.filter((o) => !o.isPickup && o.status === "active");
-	const pendingPickups = orders.filter((o) => o.isPickup && o.status === "pending");
-	const activePickups = orders.filter((o) => o.isPickup && o.status === "active");
-	const readyOrders = orders.filter((o) => o.isPickup && o.status === "ready");
-
-	// Search logic for pending orders
-	const filteredPending = pendingPickups.filter((o) =>
-		o.orderId.toString().includes(searchQuery) ||
-		(o.customerPhone && o.customerPhone.includes(searchQuery))
-	);
-
-	// --- REUSABLE TICKET COMPONENT ---
+	// --- REUSABLE TICKET ---
 	const TicketCard = ({ order, children }: { order: IncomingOrder, children: React.ReactNode }) => (
 		<motion.div layout initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
 			className="bg-stone-800 border-2 border-stone-700/50 rounded-3xl p-5 shadow-xl flex flex-col justify-between"
@@ -132,12 +188,42 @@ export default function KitchenClient({ initialOrders }: { initialOrders: Incomi
 					</ul>
 				</div>
 			</div>
-			{children}
+
+			{/* Action Area (Normal vs Confirming) */}
+			<div className="mt-2 h-14">
+				{confirmId === order.orderId ? (
+					<motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex gap-2 h-full">
+						<button onClick={() => setConfirmId(null)} className="w-1/3 bg-stone-700 hover:bg-stone-600 text-stone-300 rounded-xl font-bold transition-colors">
+							Cancel
+						</button>
+						<button onClick={executeStatusChange} className="w-2/3 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-black flex items-center justify-center gap-2 shadow-md">
+							<AlertCircle size={18} /> Confirm {confirmLabel}
+						</button>
+					</motion.div>
+				) : (
+					<div className="h-full flex gap-2">
+						{children}
+					</div>
+				)}
+			</div>
 		</motion.div>
 	);
 
 	return (
-		<div className="min-h-screen bg-stone-950 text-stone-100 p-6 md:p-10 font-sans">
+		<div className="min-h-screen bg-stone-950 text-stone-100 p-6 md:p-10 font-sans relative overflow-x-hidden">
+
+			{/* TOASTS PORTAL */}
+			<div className="fixed top-6 right-6 z-[100] flex flex-col gap-3 pointer-events-none">
+				<AnimatePresence>
+					{toasts.map((toast) => (
+						<motion.div key={toast.id} initial={{ opacity: 0, x: 50, scale: 0.9 }} animate={{ opacity: 1, x: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }} className="bg-stone-800 border border-stone-700 text-stone-100 px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 font-bold pointer-events-auto">
+							<CheckCircle size={20} className="text-emerald-500" />
+							{toast.message}
+						</motion.div>
+					))}
+				</AnimatePresence>
+			</div>
+
 			<AnimatePresence>
 				{isPinLocked && (
 					<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-stone-950/90 backdrop-blur-md flex items-center justify-center p-4">
@@ -146,7 +232,6 @@ export default function KitchenClient({ initialOrders }: { initialOrders: Incomi
 				)}
 			</AnimatePresence>
 
-			{/* HEADER & TABS */}
 			<header className="mb-8">
 				<div className="flex justify-between items-center mb-8">
 					<h1 className="text-3xl font-black text-amber-50">Kitchen Display</h1>
@@ -158,82 +243,81 @@ export default function KitchenClient({ initialOrders }: { initialOrders: Incomi
 
 				<div className="flex gap-4 border-b border-stone-800 pb-px">
 					{[
-						{ id: "tables", label: "Tables", count: tableOrders.length },
-						{ id: "pickups", label: "Pickups", badge: pendingPickups.length, count: activePickups.length },
-						{ id: "ready", label: "Ready", count: readyOrders.length },
+						{ id: "tables", label: "Tables", count: tableOrders.length, unread: unreadTables },
+						{ id: "pickups", label: "Pickups", count: activePickups.length, unread: unreadPickups },
+						{ id: "ready", label: "Ready", count: readyOrders.length, unread: unreadReady },
 					].map((t) => (
 						<button key={t.id} onClick={() => setActiveTab(t.id as any)} className={`relative px-6 py-4 font-black uppercase tracking-widest text-sm transition-colors ${activeTab === t.id ? "text-amber-400 border-b-2 border-amber-400" : "text-stone-500 hover:text-stone-300"}`}>
 							<div className="flex items-center gap-2">
 								{t.label} ({t.count})
-								{t.badge ? <span className="bg-rose-500 text-white text-[10px] px-2 py-0.5 rounded-full animate-bounce">{t.badge} New</span> : null}
+								{t.unread > 0 && <span className="bg-rose-500 text-white text-[10px] px-2 py-0.5 rounded-full animate-pulse shadow-[0_0_10px_rgba(244,63,94,0.5)]">{t.unread} New</span>}
 							</div>
 						</button>
 					))}
 				</div>
 			</header>
 
-			{/* TAB CONTENT */}
 			<main className="w-full">
 
 				{/* 1. TABLES TAB */}
 				{activeTab === "tables" && (
-					<div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
-						{tableOrders.map((o) => (
-							<TicketCard key={o.orderId} order={o}>
-								<button onClick={() => changeOrderStatus(o.orderId, "completed")} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-4 rounded-xl font-black flex items-center justify-center gap-2 transition-transform active:scale-95">
-									<CheckCircle size={20} /> Mark Complete
-								</button>
-							</TicketCard>
-						))}
-						{tableOrders.length === 0 && <p className="col-span-full text-center py-20 text-stone-600 font-bold">No active table orders.</p>}
+					<div className="space-y-6">
+						<div className="relative max-w-md">
+							<Search className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-500" size={18} />
+							<input type="text" placeholder="Search Order ID or Table..." value={searchTables} onChange={(e) => setSearchTables(e.target.value)} className="w-full bg-stone-900/50 border border-stone-800 rounded-xl py-3 pl-12 pr-4 focus:ring-2 focus:ring-emerald-500/50 focus:outline-none text-stone-200" />
+						</div>
+						<div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
+							<AnimatePresence>
+								{filteredTables.map((o) => (
+									<TicketCard key={o.orderId} order={o}>
+										<button onClick={() => triggerConfirm(o.orderId, "completed", "Complete")} className="w-full h-full bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-black flex items-center justify-center gap-2 transition-transform active:scale-95 shadow-md">
+											<CheckCircle size={20} /> Mark Complete
+										</button>
+									</TicketCard>
+								))}
+							</AnimatePresence>
+						</div>
 					</div>
 				)}
 
-				{/* 2. PICKUPS TAB (SPLIT SCREEN) */}
+				{/* 2. PICKUPS TAB */}
 				{activeTab === "pickups" && (
 					<div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-						{/* LEFT SIDE: PENDING (WhatsApp Verification) */}
+						{/* LEFT SIDE: PENDING */}
 						<div className="bg-stone-900/50 rounded-[2rem] border border-stone-800 p-6">
-							<div className="flex justify-between items-center mb-6">
-								<h2 className="text-xl font-black text-amber-500 flex items-center gap-2"><Bell size={24} /> Verify Payment</h2>
-							</div>
-
+							<h2 className="text-xl font-black text-amber-500 mb-6 flex items-center gap-2"><Bell size={24} /> Verify Payment</h2>
 							<div className="relative mb-6">
 								<Search className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-500" size={18} />
-								<input
-									type="text" placeholder="Search ID or Phone..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-									className="w-full bg-stone-950 border border-stone-800 rounded-xl py-3 pl-12 pr-4 focus:ring-2 focus:ring-amber-500/50 focus:outline-none text-stone-200"
-								/>
+								<input type="text" placeholder="Search ID or Phone..." value={searchPickups} onChange={(e) => setSearchPickups(e.target.value)} className="w-full bg-stone-950 border border-stone-800 rounded-xl py-3 pl-12 pr-4 focus:ring-2 focus:ring-amber-500/50 focus:outline-none text-stone-200" />
 							</div>
-
 							<div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2 custom-scrollbar">
 								<AnimatePresence>
-									{filteredPending.map((o) => (
+									{filteredPickups.map((o) => (
 										<TicketCard key={o.orderId} order={o}>
-											<div className="grid grid-cols-2 gap-3 mt-2">
-												<button onClick={() => changeOrderStatus(o.orderId, "cancelled")} className="bg-stone-900 hover:bg-rose-950 text-rose-500 border border-rose-900/50 py-3 rounded-xl font-black flex justify-center items-center gap-2 transition-colors">
-													<XCircle size={18} /> Reject
-												</button>
-												<button onClick={() => changeOrderStatus(o.orderId, "active")} className="bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-xl font-black flex justify-center items-center gap-2 shadow-md">
-													<Check size={18} /> Approve
-												</button>
-											</div>
+											<button onClick={() => triggerConfirm(o.orderId, "cancelled", "Reject")} className="w-1/3 bg-stone-900 hover:bg-rose-950 text-rose-500 border border-rose-900/50 rounded-xl font-black flex justify-center items-center gap-2 transition-colors">
+												<XCircle size={18} />
+											</button>
+											<button onClick={() => triggerConfirm(o.orderId, "active", "Approve")} className="w-2/3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-black flex justify-center items-center gap-2 shadow-md">
+												<Check size={18} /> Approve
+											</button>
 										</TicketCard>
 									))}
-									{filteredPending.length === 0 && <p className="text-center py-10 text-stone-600 font-bold">No pending pickups.</p>}
 								</AnimatePresence>
 							</div>
 						</div>
 
-						{/* RIGHT SIDE: PREPARING (Active Pickups) */}
+						{/* RIGHT SIDE: PREPARING */}
 						<div className="bg-stone-900/50 rounded-[2rem] border border-stone-800 p-6">
 							<h2 className="text-xl font-black text-emerald-500 mb-6 flex items-center gap-2"><Coffee size={24} /> Preparing</h2>
 							<div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[70vh] overflow-y-auto pr-2">
 								<AnimatePresence>
 									{activePickups.map((o) => (
 										<TicketCard key={o.orderId} order={o}>
-											<button onClick={() => changeOrderStatus(o.orderId, "ready")} className="w-full bg-amber-600 hover:bg-amber-500 text-stone-950 py-3.5 rounded-xl font-black flex justify-center items-center gap-2 shadow-md">
-												Mark as Ready <ArrowRight size={18} />
+											<button onClick={() => triggerConfirm(o.orderId, "pending", "Revert")} className="w-1/3 bg-stone-700 hover:bg-stone-600 text-stone-300 rounded-xl font-bold flex items-center justify-center transition-colors tooltip" title="Revert to Pending">
+												<Undo2 size={18} />
+											</button>
+											<button onClick={() => triggerConfirm(o.orderId, "ready", "Ready")} className="w-2/3 bg-amber-600 hover:bg-amber-500 text-stone-950 rounded-xl font-black flex justify-center items-center gap-2 shadow-md">
+												Ready <ArrowRight size={18} />
 											</button>
 										</TicketCard>
 									))}
@@ -243,20 +327,26 @@ export default function KitchenClient({ initialOrders }: { initialOrders: Incomi
 					</div>
 				)}
 
-				{/* 3. READY TAB (Awaiting Customer Arrival) */}
+				{/* 3. READY TAB */}
 				{activeTab === "ready" && (
-					<div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
-						{readyOrders.map((o) => (
-							<TicketCard key={o.orderId} order={o}>
-								<button onClick={() => changeOrderStatus(o.orderId, "completed")} className="w-full bg-stone-100 hover:bg-white text-stone-900 py-4 rounded-xl font-black flex items-center justify-center gap-2 transition-transform active:scale-95">
-									<ShoppingBag size={20} /> Picked Up
-								</button>
-							</TicketCard>
-						))}
-						{readyOrders.length === 0 && <p className="col-span-full text-center py-20 text-stone-600 font-bold">No orders waiting for pickup.</p>}
+					<div className="space-y-6">
+						<div className="relative max-w-md">
+							<Search className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-500" size={18} />
+							<input type="text" placeholder="Search Order ID or Phone..." value={searchReady} onChange={(e) => setSearchReady(e.target.value)} className="w-full bg-stone-900/50 border border-stone-800 rounded-xl py-3 pl-12 pr-4 focus:ring-2 focus:ring-amber-500/50 focus:outline-none text-stone-200" />
+						</div>
+						<div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
+							<AnimatePresence>
+								{filteredReady.map((o) => (
+									<TicketCard key={o.orderId} order={o}>
+										<button onClick={() => triggerConfirm(o.orderId, "completed", "Picked Up")} className="w-full h-full bg-stone-100 hover:bg-white text-stone-900 rounded-xl font-black flex items-center justify-center gap-2 transition-transform active:scale-95 shadow-md">
+											<ShoppingBag size={20} /> Picked Up
+										</button>
+									</TicketCard>
+								))}
+							</AnimatePresence>
+						</div>
 					</div>
 				)}
-
 			</main>
 		</div>
 	);

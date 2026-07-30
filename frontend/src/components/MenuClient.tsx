@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ChevronUp, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import CheckoutFlow from "./CheckoutFlow";
 import { AnimatePresence } from "framer-motion";
@@ -35,6 +35,7 @@ export default function MenuClient({
 	orderType: string,
 	tableNumber: string | null
 }) {
+	const [isCartOpen, setIsCartOpen] = useState(false);
 	const router = useRouter();
 	const [cart, setCart] = useState<CartItem[]>([]);
 	const [activeCategory, setActiveCategory] = useState("All");
@@ -172,17 +173,55 @@ export default function MenuClient({
 					animate={{ y: 0 }}
 					className="fixed bottom-0 left-0 right-0 p-6 z-50 pointer-events-none"
 				>
-					<div className="max-w-lg mx-auto bg-amber-900 text-white p-4 rounded-4xl shadow-2xl flex justify-between items-center pointer-events-auto">
-						<div className="pl-2">
-							<p className="text-amber-200/80 text-xs uppercase tracking-wider font-bold mb-0.5">Total Order</p>
-							<p className="font-black text-2xl">{(totalPiastres / 100).toFixed(2)} EGP</p>
+					<div className="max-w-lg mx-auto bg-amber-900 text-white p-4 rounded-[2rem] shadow-2xl pointer-events-auto overflow-hidden">
+
+						{/* SLIDING CART DETAILS */}
+						<AnimatePresence>
+							{isCartOpen && (
+								<motion.div
+									initial={{ height: 0, opacity: 0 }}
+									animate={{ height: "auto", opacity: 1 }}
+									exit={{ height: 0, opacity: 0 }}
+									className="mb-4 space-y-3 border-b border-amber-800 pb-4"
+								>
+									<div className="flex justify-between items-center mb-4">
+										<span className="font-bold text-amber-200 tracking-widest uppercase text-xs">Your Order Items</span>
+									</div>
+									{cart.map((item) => (
+										<div key={item.id} className="flex justify-between items-center text-sm">
+											<div className="flex items-center gap-3">
+												<span className="bg-amber-800 text-amber-100 font-bold px-2 py-1 rounded-md">{item.quantity}x</span>
+												<span className="font-medium">{item.name}</span>
+											</div>
+											<span className="font-bold">{(item.priceInPiastres * item.quantity / 100).toFixed(2)}</span>
+										</div>
+									))}
+								</motion.div>
+							)}
+						</AnimatePresence>
+
+						{/* BOTTOM SUMMARY BAR */}
+						<div className="flex justify-between items-center">
+							<div
+								className="pl-2 cursor-pointer group"
+								onClick={() => setIsCartOpen(!isCartOpen)}
+							>
+								<p className="text-amber-200/80 text-xs uppercase tracking-wider font-bold mb-0.5 flex items-center gap-1 group-hover:text-amber-100 transition-colors">
+									Total Order
+									<ChevronUp size={14} className={`transition-transform duration-300 ${isCartOpen ? "rotate-180" : ""}`} />
+								</p>
+								<p className="font-black text-2xl">{(totalPiastres / 100).toFixed(2)} EGP</p>
+							</div>
+							<button
+								onClick={() => setIsCheckoutOpen(true)}
+								className="bg-white text-amber-900 px-8 py-4 rounded-2xl font-black shadow-inner active:scale-95 transition-transform flex items-center gap-3"
+							>
+								Checkout
+								<span className="bg-amber-100 text-amber-900 px-2.5 py-1 rounded-full text-sm">
+									{cart.reduce((sum, item) => sum + item.quantity, 0)}
+								</span>
+							</button>
 						</div>
-						<button onClick={() => setIsCheckoutOpen(true)} className="bg-white text-amber-900 px-8 py-4 rounded-2xl font-black shadow-inner active:scale-95 transition-transform flex items-center gap-3">
-							Checkout
-							<span className="bg-amber-100 text-amber-900 px-2.5 py-1 rounded-full text-sm">
-								{cart.reduce((sum, item) => sum + item.quantity, 0)}
-							</span>
-						</button>
 					</div>
 				</motion.div>
 			)}
