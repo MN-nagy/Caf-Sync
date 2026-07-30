@@ -4,15 +4,16 @@ import { motion, Variants } from "framer-motion";
 import { Coffee, ShoppingBag } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-// --- Organic Latte Art & Steam ---
+// --- UPDATED COMPONENT: Darker Steam & Faint Blob ---
 function AmbientCoffeeArt({ className, delay = 0 }: { className: string, delay?: number }) {
-  const steamLines = [1, 2, 3];
 
   return (
-    <div className={`absolute w-72 h-72 opacity-[0.07] pointer-events-none ${className}`}>
-      {/* 1. The Liquid Blob  */}
+    // Removed the global opacity-[0.12] from this wrapper so the steam can be darker
+    <div className={`absolute w-72 h-72 pointer-events-none ${className}`}>
+
+      {/* 1. The Liquid Blob - We moved the low opacity (opacity-[0.08]) directly here */}
       <motion.div
-        className="absolute inset-0 bg-amber-900"
+        className="absolute inset-0 bg-amber-900 opacity-[0.08]"
         style={{ borderRadius: "40% 60% 70% 30% / 40% 50% 60% 50%" }}
         animate={{
           rotate: [0, 360],
@@ -25,30 +26,6 @@ function AmbientCoffeeArt({ className, delay = 0 }: { className: string, delay?:
         transition={{ repeat: Infinity, duration: 20, ease: "linear", delay }}
       />
 
-      {/* 2. The Rising Steam */}
-      {steamLines.map((line, index) => (
-        <motion.div
-          key={line}
-          className="absolute left-1/2 top-1/2 text-amber-900"
-          initial={{ opacity: 0, y: 0, x: (index - 1) * 20 }}
-          animate={{
-            opacity: [0, 1, 0],
-            y: [-20, -100], // Float up
-            x: [(index - 1) * 20, (index - 1) * 20 + (index % 2 === 0 ? 15 : -15)] // Drift slightly left/right
-          }}
-          transition={{
-            repeat: Infinity,
-            duration: 4,
-            delay: delay + (index * 1.5), // Stagger the steam rising
-            ease: "easeInOut"
-          }}
-        >
-          {/* A simple SVG that looks like a wavy steam line */}
-          <svg width="12" height="40" viewBox="0 0 12 40" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
-            <path d="M6 38 C -4 28, 16 18, 6 2" />
-          </svg>
-        </motion.div>
-      ))}
     </div>
   );
 }
@@ -99,9 +76,9 @@ export default function WelcomeGate() {
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.97 }}
             onClick={() => router.push("/setup")}
-            className="w-full bg-white/90 backdrop-blur-sm border-2 border-stone-200 p-6 rounded-3xl shadow-sm flex items-center gap-6 group hover:border-emerald-600 transition-colors"
+            className="w-full bg-white/90 backdrop-blur-sm border-2 border-stone-200 p-6 rounded-3xl shadow-sm flex items-center gap-6 group hover:border-emerald-600 active:border-emerald-600 transition-colors"
           >
-            <div className="bg-emerald-100 p-4 rounded-full text-emerald-700 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+            <div className="bg-emerald-100 p-4 rounded-full text-emerald-700 group-hover:bg-emerald-600 group-hover:text-white group-active:bg-emerald-600 group-active:text-white transition-colors">
               <Coffee size={32} strokeWidth={2.5} />
             </div>
             <div className="text-left">
@@ -115,9 +92,9 @@ export default function WelcomeGate() {
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.97 }}
             onClick={() => router.push("/menu?type=pickup")}
-            className="w-full bg-white/90 backdrop-blur-sm border-2 border-stone-200 p-6 rounded-3xl shadow-sm flex items-center gap-6 group hover:border-amber-900 transition-colors"
+            className="w-full bg-white/90 backdrop-blur-sm border-2 border-stone-200 p-6 rounded-3xl shadow-sm flex items-center gap-6 group hover:border-amber-900 active:border-amber-900 transition-colors"
           >
-            <div className="bg-amber-100 p-4 rounded-full text-amber-900 group-hover:bg-amber-900 group-hover:text-white transition-colors">
+            <div className="bg-amber-100 p-4 rounded-full text-amber-900 group-hover:bg-amber-900 group-hover:text-white group-active:bg-amber-900 group-active:text-white transition-colors">
               <ShoppingBag size={32} strokeWidth={2.5} />
             </div>
             <div className="text-left">
