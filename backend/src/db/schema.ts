@@ -24,7 +24,7 @@ export const orders = pgTable("orders", {
   isPickup: boolean("is_pickup").default(false), // True if passing by
   totalPiastres: integer("total_piastres").notNull(),
   status: text("status", {
-    enum: ["pending", "active", "ready", "completed"],
+    enum: ["pending", "active", "ready", "completed", "cancelled"],
   }).default("active"),
   customerPhone: varchar("customer_phone", { length: 20 }),
   createdAt: timestamp("created_at").defaultNow(),
