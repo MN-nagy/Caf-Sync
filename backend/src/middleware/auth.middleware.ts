@@ -70,3 +70,33 @@ export const requireShift = (
     });
   }
 };
+
+export const requireManager = (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const deviceToken = req.cookies?.deviceToken;
+    if (!deviceToken) {
+      res
+        .status(401)
+        .json({ success: false, message: "Manager login required" });
+      return;
+    }
+    const decoded = jwt.verify(
+      deviceToken,
+      process.env.JWT_SECRET!,
+    ) as unknown as AuthPayload;
+    if (decoded.role !== "manager") {
+      res
+        .status(403)
+        .json({ success: false, message: "Manager access required" });
+      return;
+    }
+    req.user = decoded;
+    next();
+  } catch {
+    res.status(401).json({ success: false, message: "Invalid session" });
+  }
+};

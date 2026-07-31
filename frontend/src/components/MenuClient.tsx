@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, ChevronUp, Coffee } from "lucide-react";
+import { ArrowLeft, ChevronUp, Coffee, Tag } from "lucide-react";
 import { useRouter } from "next/navigation";
 import CheckoutFlow from "./CheckoutFlow";
 
@@ -11,42 +11,18 @@ export type Drink = {
 	name: string;
 	description: string;
 	priceInPiastres: number;
-	originalPriceInPiastres?: number | null; // NEW FIELD
-	category?: string;
+	originalPriceInPiastres?: number | null;
+	category: string;
 };
 
 type CartItem = Drink & { quantity: number };
-
-// Helper to provide premium hero images matched to our realistic menu
-const getDrinkImage = (name: string) => {
-	const lower = name.toLowerCase();
-	if (lower.includes("cortado") || lower.includes("flat white") || lower.includes("espresso"))
-		return "https://images.unsplash.com/photo-1577968897966-3d4325b36b61?w=800&q=80";
-	if (lower.includes("v60") || lower.includes("pour over"))
-		return "https://images.unsplash.com/photo-1497935586351-b67a49e012bf?w=800&q=80";
-	if (lower.includes("turkish"))
-		return "https://images.unsplash.com/photo-1541167760496-1628856ab772?w=800&q=80";
-	if (lower.includes("spanish") || lower.includes("pistachio") || lower.includes("cold brew"))
-		return "https://images.unsplash.com/photo-1461023058943-07fcbe16d735?w=800&q=80";
-	if (lower.includes("frappe") || lower.includes("biscoff") || lower.includes("mocha"))
-		return "https://images.unsplash.com/photo-1572442388796-11668a67e53d?w=800&q=80";
-	return "https://images.unsplash.com/photo-1534778101976-62847782c213?w=800&q=80"; // Default
-};
 
 const formatEGP = (piastres: number) => {
 	const egp = piastres / 100;
 	return Number.isInteger(egp) ? `${egp} EGP` : `${egp.toFixed(2)} EGP`;
 };
 
-export default function MenuClient({
-	drinks,
-	orderType,
-	tableNumber,
-}: {
-	drinks: Drink[];
-	orderType: string;
-	tableNumber: string | null;
-}) {
+export default function MenuClient({ drinks, orderType, tableNumber }: { drinks: Drink[]; orderType: string; tableNumber: string | null; }) {
 	const [isCartOpen, setIsCartOpen] = useState(false);
 	const [cart, setCart] = useState<CartItem[]>([]);
 	const [activeCategory, setActiveCategory] = useState("All");
@@ -54,10 +30,9 @@ export default function MenuClient({
 
 	const router = useRouter();
 
-	// DYNAMIC CATEGORIES: Only show "Offers" tab if there's actually a sale going on!
 	const hasOffers = drinks.some(d => d.originalPriceInPiastres && d.originalPriceInPiastres > d.priceInPiastres);
 	const baseCategories = ["All", "Hot Coffee", "Iced Coffee", "Frappe"];
-	const categories = hasOffers ? ["All", "Offers", "Hot Coffee", "Iced Coffee", "Frappe"] : baseCategories;
+	const categories = hasOffers ? ["All", "Offers", ...baseCategories.slice(1)] : baseCategories;
 
 	const handleBack = () => {
 		if (typeof window !== "undefined" && window.history.length > 1) {
@@ -69,27 +44,10 @@ export default function MenuClient({
 
 	const filteredDrinks = drinks.filter((drink) => {
 		if (activeCategory === "All") return true;
-
-		// OFFERS FILTER
 		if (activeCategory === "Offers") {
 			return !!(drink.originalPriceInPiastres && drink.originalPriceInPiastres > drink.priceInPiastres);
 		}
-
-		if (drink.category) {
-			return drink.category.toLowerCase() === activeCategory.toLowerCase();
-		}
-
-		const lowerName = drink.name.toLowerCase();
-		if (activeCategory === "Hot Coffee") {
-			return lowerName.includes("cortado") || lowerName.includes("flat") || lowerName.includes("v60") || lowerName.includes("turkish") || lowerName.includes("hot");
-		}
-		if (activeCategory === "Iced Coffee") {
-			return lowerName.includes("cold") || lowerName.includes("iced") || lowerName.includes("spanish") || lowerName.includes("pistachio");
-		}
-		if (activeCategory === "Frappe") {
-			return lowerName.includes("frappe") || lowerName.includes("biscoff") || lowerName.includes("mocha");
-		}
-		return true;
+		return drink.category === activeCategory;
 	});
 
 	const addToCart = (drink: Drink) => {
@@ -139,68 +97,63 @@ export default function MenuClient({
 									: "bg-white text-stone-500 hover:text-amber-900"
 								}`}
 						>
-							{category === "Offers" && <span className={activeCategory === "Offers" ? "text-white" : "text-rose-500"}>🔥</span>}
+							{category === "Offers" && <span className={activeCategory === "Offers" ? "text-white" : "text-rose-500"}><Tag size={14} /></span>}
 							{category}
 						</button>
 					))}
 				</div>
 			</header>
 
-			<div className="p-6 space-y-6 max-w-lg mx-auto">
+			<div className="p-6 space-y-5 max-w-lg mx-auto">
 				{filteredDrinks.map((drink) => {
 					const qty = getQty(drink.id);
 					const isSale = drink.originalPriceInPiastres && drink.originalPriceInPiastres > drink.priceInPiastres;
 
 					return (
-						<motion.div key={drink.id} layout initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-4xl overflow-hidden shadow-sm border border-stone-200 relative">
+						<motion.div key={drink.id} layout initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-3xl p-6 shadow-sm border border-stone-200 relative overflow-hidden">
 
-							{/* SALE BADGE */}
-							{isSale && (
-								<div className="absolute top-4 left-4 z-10 bg-rose-600 text-white text-xs font-black px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1">
-									SALE
-								</div>
-							)}
+							{/* Subtle top accent line based on state */}
+							<div className={`absolute top-0 left-0 w-full h-1.5 ${isSale ? "bg-rose-500" : "bg-emerald-600/20"}`} />
 
-							<div className="relative h-56 w-full bg-stone-200">
-								<img src={getDrinkImage(drink.name)} alt={drink.name} loading="lazy" className="absolute inset-0 w-full h-full object-cover" />
-							</div>
-
-							<div className="p-6">
-								<div className="flex justify-between items-start mb-2 gap-2">
+							<div className="flex justify-between items-start mb-3 mt-1 gap-4">
+								<div>
+									{/* Category Overline */}
+									<span className="text-[10px] font-black uppercase tracking-widest text-stone-400 mb-1.5 block">
+										{drink.category}
+									</span>
 									<h2 className="text-2xl font-black text-amber-900 leading-tight">
 										{drink.name}
 									</h2>
+								</div>
 
-									{/* PRICE BLOCK (Handles Normal vs Sale) */}
-									<div className="flex flex-col items-end">
-										{isSale && (
-											<span className="text-sm text-stone-400 line-through font-bold mb-0.5">
-												{formatEGP(drink.originalPriceInPiastres!)}
-											</span>
-										)}
-										<span className={`text-lg font-black px-3 py-1 rounded-xl whitespace-nowrap ${isSale ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>
-											{formatEGP(drink.priceInPiastres)}
+								<div className="flex flex-col items-end shrink-0">
+									{isSale && (
+										<span className="text-xs text-stone-400 line-through font-bold mb-0.5">
+											{formatEGP(drink.originalPriceInPiastres!)}
 										</span>
-									</div>
-								</div>
-
-								<p className="text-stone-500 text-sm leading-relaxed mb-6">
-									{drink.description}
-								</p>
-
-								<div className="flex justify-end">
-									{qty > 0 ? (
-										<div className="flex items-center gap-4 bg-stone-100 rounded-full p-1.5 border border-stone-200 w-36 justify-between">
-											<button onClick={() => removeFromCart(drink.id)} className="w-10 h-10 flex items-center justify-center rounded-full bg-white text-amber-900 shadow-sm hover:bg-stone-50 active:scale-90 transition-transform font-bold text-xl">-</button>
-											<span className="font-bold text-lg text-amber-900">{qty}</span>
-											<button onClick={() => addToCart(drink)} className="w-10 h-10 flex items-center justify-center rounded-full bg-emerald-600 text-white shadow-sm hover:bg-emerald-700 active:scale-90 transition-transform font-bold text-xl">+</button>
-										</div>
-									) : (
-										<button onClick={() => addToCart(drink)} className="bg-amber-900 hover:bg-amber-800 active:scale-95 text-white px-8 py-3.5 rounded-full font-bold shadow-md transition-transform w-full">
-											Add to Order
-										</button>
 									)}
+									<span className={`text-lg font-black px-3 py-1 rounded-xl whitespace-nowrap ${isSale ? "bg-rose-50 text-rose-700 ring-1 ring-rose-200" : "bg-emerald-50 text-emerald-700"}`}>
+										{formatEGP(drink.priceInPiastres)}
+									</span>
 								</div>
+							</div>
+
+							<p className="text-stone-500 text-sm leading-relaxed mb-6 pr-4">
+								{drink.description}
+							</p>
+
+							<div className="flex justify-end pt-4 border-t border-stone-100">
+								{qty > 0 ? (
+									<div className="flex items-center gap-4 bg-stone-100 rounded-full p-1 border border-stone-200 w-36 justify-between">
+										<button onClick={() => removeFromCart(drink.id)} className="w-10 h-10 flex items-center justify-center rounded-full bg-white text-amber-900 shadow-sm hover:bg-stone-50 active:scale-90 transition-transform font-bold text-xl">-</button>
+										<span className="font-bold text-lg text-amber-900">{qty}</span>
+										<button onClick={() => addToCart(drink)} className="w-10 h-10 flex items-center justify-center rounded-full bg-emerald-600 text-white shadow-sm hover:bg-emerald-700 active:scale-90 transition-transform font-bold text-xl">+</button>
+									</div>
+								) : (
+									<button onClick={() => addToCart(drink)} className="bg-amber-900/5 hover:bg-amber-900/10 active:scale-95 text-amber-900 px-6 py-3 rounded-2xl font-bold transition-transform w-full border border-amber-900/10 flex items-center justify-center gap-2">
+										Add to Order
+									</button>
+								)}
 							</div>
 						</motion.div>
 					);

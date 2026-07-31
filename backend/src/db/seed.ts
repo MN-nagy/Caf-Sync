@@ -1,62 +1,82 @@
 import { db } from "./index.ts";
-import { drinks, kitchenSettings } from "./schema.ts";
-import bcrypt from "bcrypt";
+import { drinks, orders, orderItems } from "./schema.ts";
 
-async function seed() {
-  console.log("🌱 Seeding database...");
+const seedDrinks = [
+  {
+    name: "Cortado",
+    description:
+      "Equal parts double espresso and steamed milk for a robust finish.",
+    priceInPiastres: 7500,
+    category: "Hot Coffee",
+  },
+  {
+    name: "Flat White",
+    description: "Double ristretto with micro-foamed milk.",
+    priceInPiastres: 8500,
+    category: "Hot Coffee",
+  },
+  {
+    name: "V60 Pour Over",
+    description: "Single origin Ethiopian beans, bright and fruity notes.",
+    priceInPiastres: 11000,
+    category: "Hot Coffee",
+  },
+  {
+    name: "Double Turkish Coffee",
+    description: "Authentic, rich, and unfiltered. Made to order.",
+    priceInPiastres: 6000,
+    category: "Hot Coffee",
+  },
+  {
+    name: "Iced Spanish Latte",
+    description: "Espresso, milk, and sweetened condensed milk over ice.",
+    priceInPiastres: 10500,
+    originalPriceInPiastres: 13000,
+    category: "Iced Coffee",
+  },
+  {
+    name: "Cold Brew (24h)",
+    description: "Steeped slowly for a smooth, zero-acidity kick.",
+    priceInPiastres: 9500,
+    category: "Iced Coffee",
+  },
+  {
+    name: "Iced Pistachio Latte",
+    description: "Our signature espresso blended with rich pistachio cream.",
+    priceInPiastres: 14500,
+    category: "Iced Coffee",
+  },
+  {
+    name: "Lotus Biscoff Frappe",
+    description:
+      "Blended with real Lotus spread, topped with whipped cream and biscuit crumble.",
+    priceInPiastres: 15000,
+    category: "Frappe",
+  },
+  {
+    name: "Mocha Frappe",
+    description: "Rich dark chocolate, espresso, and milk blended with ice.",
+    priceInPiastres: 11500,
+    originalPriceInPiastres: 14000,
+    category: "Frappe",
+  },
+];
 
-  // Remember: Prices are in Piastres! (e.g., 95 EGP = 9500 Piastres)
-  const menuItems = [
-    {
-      name: "Cappuccino",
-      description: "Rich espresso under a smooth, thick layer of milk foam.",
-      priceInPiastres: 9500,
-    },
-    {
-      name: "Flat White",
-      description: "Ristretto shots of espresso with velvety steamed milk.",
-      priceInPiastres: 10500,
-    },
-    {
-      name: "Iced Spanish Latte",
-      description:
-        "Espresso and milk with a touch of sweetened condensed milk.",
-      priceInPiastres: 12700,
-    },
-    {
-      name: "Cold Brew",
-      description: "Slow-steeped, incredibly smooth iced coffee.",
-      priceInPiastres: 11000,
-    },
-    {
-      name: "Mocha Frappe",
-      description: "Blended iced coffee with rich chocolate and whipped cream.",
-      priceInPiastres: 13500,
-    },
-  ];
-
+async function runSeed() {
+  console.log("🌱 Starting Database Reset & Seed...");
   try {
-    // Insert the drinks into the database
-    // await db.insert(drinks).values(menuItems);
-
-    console.log("🔒 Securing admin credentials...");
-
-    // We use a "salt rounds" value of 10. This dictates how many times the data
-    // goes through the hashing algorithm. 10 is the industry standard for speed vs security.
-    const passwordHash = await bcrypt.hash("Admin2026!", 10);
-    const pinHash = await bcrypt.hash("1234", 10);
-
-    await db.insert(kitchenSettings).values({
-      kitchenEmail: "manager@caf.com",
-      kitchenPassword: passwordHash,
-      kitchenPinHash: pinHash,
-    });
-
-    console.log("✅ Admin account created!");
-    console.log("Email: manager@caf.com | Pass: Admin2026! | PIN: 1234");
+    await db.delete(orderItems);
+    await db.delete(orders);
+    await db.delete(drinks);
+    await db.insert(drinks).values(seedDrinks);
+    console.log(
+      "✅ Database successfully seeded with typography-focused menu!",
+    );
+    process.exit(0);
   } catch (error) {
-    console.error("❌ Error seeding database:", error);
+    console.error("❌ Seeding failed:", error);
+    process.exit(1);
   }
 }
 
-seed();
+runSeed();

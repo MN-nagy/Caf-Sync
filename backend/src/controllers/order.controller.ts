@@ -2,6 +2,36 @@ import type { Request, Response, NextFunction } from "express";
 import { drinks, orders, orderItems } from "../db/schema.ts";
 import { db } from "../db/index.ts";
 import { eq, asc, inArray } from "drizzle-orm";
+import { z } from "zod";
+
+const orderItemSchema = z.object({
+  drinkId: z.number().int().positive(),
+  quantity: z.number().int().positive().max(50), // sane upper bound, adjust as needed
+});
+
+const addOrderSchema = z
+  .object({
+    isPickup: z.boolean(),
+    tableNumber: z.coerce.number().int().positive().nullable().optional(),
+    customerPhone: z.string().min(5).max(20).nullish(),
+    items: z.array(orderItemSchema).min(1),
+  })
+  .refine((data) => !data.isPickup || !!data.customerPhone, {
+    message: "customerPhone is required for pickup orders",
+    path: ["customerPhone"],
+  });
+
+const idParamSchema = z.object({
+  id: z.coerce.number().int().positive(),
+});
+
+const statusSchema = z.object({
+  status: z.enum(["pending", "active", "ready", "completed", "cancelled"]),
+});
+
+const phoneSchema = z.object({
+  customerPhone: z.string().min(5).max(20),
+});
 
 export const addOrder = async (
   req: Request,
@@ -9,34 +39,53 @@ export const addOrder = async (
   next: NextFunction,
 ): Promise<void> => {
   try {
-    const { isPickup, tableNumber, items, totalPiastres, customerPhone } =
-      req.body;
-
-    if (!Array.isArray(items) || items.length === 0) {
-      res.status(400).json({
-        success: false,
-        message: "Order must include at least one item.",
-      });
-      return;
-    }
+    const { isPickup, tableNumber, items, customerPhone } =
+      addOrderSchema.parse(req.body);
 
     const generatedOrderId = await db.transaction(async (tx) => {
+      const drinkIds = items.map((item) => item.drinkId);
+
+      const menuItems = await tx
+        .select({
+          id: drinks.id,
+          price: drinks.priceInPiastres,
+          isOutOfStock: drinks.isOutOfStock,
+        })
+        .from(drinks)
+        .where(inArray(drinks.id, drinkIds));
+
+      const priceMap = new Map(menuItems.map((d) => [d.id, d]));
+
+      // Server computes the total from actual DB prices — never trust
+      // a total sent by the client.
+      let computedTotal = 0;
+      for (const item of items) {
+        const drink = priceMap.get(item.drinkId);
+        if (!drink) {
+          throw new Error(`Invalid drink ID: ${item.drinkId}`);
+        }
+        if (drink.isOutOfStock) {
+          throw new Error(`Drink ID ${item.drinkId} is out of stock`);
+        }
+        computedTotal += drink.price * item.quantity;
+      }
+
       const [newOrder] = await tx
         .insert(orders)
         .values({
-          tableNumber: tableNumber ? parseInt(tableNumber) : null,
+          tableNumber: tableNumber ?? null,
           isPickup,
-          totalPiastres,
+          totalPiastres: computedTotal,
           customerPhone: isPickup ? customerPhone : null,
           status: isPickup ? "pending" : "active",
         })
         .returning({ id: orders.id });
 
       if (!newOrder) {
-        throw new Error("Faild to create new order");
+        throw new Error("Failed to create new order");
       }
 
-      const itemsToInsert = items.map((item: any) => ({
+      const itemsToInsert = items.map((item) => ({
         orderId: newOrder.id,
         drinkId: item.drinkId,
         quantity: item.quantity,
@@ -48,9 +97,8 @@ export const addOrder = async (
     });
 
     const io = req.app.get("io");
-
     if (io) {
-      io.emit("order:created", {
+      io.of("/kitchen").emit("order:created", {
         orderId: generatedOrderId,
         tableNumber,
         isPickup,
@@ -102,7 +150,6 @@ export const getActiveOrders = async (
         });
       }
 
-      // If the order has a drink attached, push it into the array
       if (row.drinkName) {
         ordersMap.get(row.orderId).items.push({
           drinkName: row.drinkName,
@@ -111,7 +158,6 @@ export const getActiveOrders = async (
       }
     }
 
-    // Convert the Map back into a standard array for the frontend
     const formattedOrders = Array.from(ordersMap.values());
     res.status(200).json(formattedOrders);
   } catch (error) {
@@ -125,34 +171,29 @@ export const updateOrderStatus = async (
   next: NextFunction,
 ): Promise<void> => {
   try {
-    const { id } = req.params;
-    const { status } = req.body;
+    const { id: orderId } = idParamSchema.parse(req.params);
+    const { status } = statusSchema.parse(req.body);
 
-    if (!id || typeof id !== "string") {
-      res.status(400).json({ success: false, message: "Order ID is required" });
-      return;
-    }
-
-    const orderId = parseInt(id, 10);
-    if (isNaN(orderId)) {
-      res.status(400).json({
-        success: false,
-        message: "Invalid Order ID in makeOrderComplete",
-      });
-      return;
-    }
-
-    await db
+    const updated = await db
       .update(orders)
-      .set({ status: status })
-      .where(eq(orders.id, orderId));
+      .set({ status })
+      .where(eq(orders.id, orderId))
+      .returning({ id: orders.id });
+
+    if (!updated.length) {
+      res.status(404).json({ success: false, message: "Order not found" });
+      return;
+    }
 
     const io = req.app.get("io");
     if (io) {
-      io.emit("order:updated", { orderId, status });
+      io.of("/kitchen").emit("order:updated", { orderId, status });
     }
 
-    res.json({ success: true, message: `Order #${id} is now ${status}` });
+    res.json({
+      success: true,
+      message: `Order #${orderId} is now ${status}`,
+    });
   } catch (error) {
     next(error);
   }
@@ -164,25 +205,19 @@ export const updateOrderPhone = async (
   next: NextFunction,
 ): Promise<void> => {
   try {
-    const { id } = req.params;
-    const { customerPhone } = req.body;
+    const { id: orderId } = idParamSchema.parse(req.params);
+    const { customerPhone } = phoneSchema.parse(req.body);
 
-    if (!id || typeof id !== "string") {
-      res.status(400).json({ success: false, message: "Order ID is required" });
-      return;
-    }
-
-    const orderId = parseInt(id, 10);
-    if (isNaN(orderId) || !customerPhone) {
-      res.status(400).json({ success: false, message: "Invalid data" });
-      return;
-    }
-
-    // Update just the phone number in the DB
-    await db
+    const updated = await db
       .update(orders)
       .set({ customerPhone })
-      .where(eq(orders.id, orderId));
+      .where(eq(orders.id, orderId))
+      .returning({ id: orders.id });
+
+    if (!updated.length) {
+      res.status(404).json({ success: false, message: "Order not found" });
+      return;
+    }
 
     res.json({ success: true, message: "Phone updated" });
   } catch (error) {

@@ -6,7 +6,6 @@ type Props = {
 };
 
 export default async function MenuPage({ searchParams }: Props) {
-	// 1. Read the URL parameters (e.g., ?type=dine-in&table=5)
 	const resolvedSearchParams = await searchParams;
 
 	const orderType = resolvedSearchParams.type || 'pickup';
