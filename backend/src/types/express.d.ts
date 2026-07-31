@@ -2,7 +2,7 @@ import { JwtPayload } from "jsonwebtoken";
 
 export interface AuthPayload extends JwtPayload {
   sub: number;
-  role: "manager_kitchen" | "shift";
+  role: "manager" | "barista";
 }
 
 declare global {

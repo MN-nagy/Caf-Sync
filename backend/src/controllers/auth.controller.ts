@@ -2,7 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { db } from "../db/index.ts";
-import { kitchenSettings } from "../db/schema.ts";
+import { adminCredentials } from "../db/schema.ts";
 import { eq } from "drizzle-orm";
 
 if (!process.env.JWT_SECRET) {
@@ -28,8 +28,8 @@ export const login = async (
     // 1. Find the kitchen account by email
     const [account] = await db
       .select()
-      .from(kitchenSettings)
-      .where(eq(kitchenSettings.kitchenEmail, email));
+      .from(adminCredentials)
+      .where(eq(adminCredentials.kitchenEmail, email));
 
     if (!account) {
       res.status(401).json({ success: false, message: "Invalid credentials" });
@@ -43,14 +43,15 @@ export const login = async (
     }
 
     // 3. Success! Generate the 30-Day Device Token (The Wax Seal)
-    const deviceToken = jwt.sign({ role: "manager_kitchen" }, JWT_SECRET, {
+    const deviceToken = jwt.sign({ role: "manager" }, JWT_SECRET, {
       expiresIn: "30d",
     });
 
     res.cookie("deviceToken", deviceToken, {
       httpOnly: true, // prevents JavaScript/XSS theft
-      secure: process.env.NODE_ENV === "production",
+      secure: true,
       sameSite: "lax", // protection against CSRF
+      // domain: ".cafe.com", // leading . matching app and api
       maxAge: 30 * 24 * 60 * 60 * 1000, // 30d
     });
 
@@ -66,10 +67,15 @@ export const verifyPin = async (
   next: NextFunction,
 ): Promise<void> => {
   try {
-    const { pin } = req.body;
+    const deviceToken = req.cookies?.deviceToken;
+    if (!deviceToken) {
+      res.status(401).json({ success: false, message: "Device not enrolled" });
+      return;
+    }
+    jwt.verify(deviceToken, JWT_SECRET);
 
-    // Since there's only one store setup, we just grab the first row
-    const [account] = await db.select().from(kitchenSettings).limit(1);
+    const { pin } = req.body;
+    const [account] = await db.select().from(adminCredentials).limit(1);
 
     if (!account) {
       res
