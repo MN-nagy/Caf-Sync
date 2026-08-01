@@ -115,13 +115,30 @@ export default function KitchenClient({ initialOrders }: { initialOrders: Incomi
 
 
 	// --- WEBSOCKETS ---
-	// --- WEBSOCKETS ---
 	useEffect(() => {
 		const socket: Socket = io(`${SERVER_URL}/kitchen`, {
-			withCredentials: true
+			withCredentials: true,
 		});
 
-		socket.on("connect", () => setIsConnected(true));
+		const syncOrders = async () => {
+			try {
+				const res = await fetch(`${SERVER_URL}/api/orders/active`, {
+					credentials: "include",
+				});
+				if (res.ok) {
+					const data = await res.json();
+					setOrders(Array.isArray(data) ? data : []);
+				}
+			} catch (error) {
+				console.error("Failed to re-sync orders:", error);
+			}
+		};
+
+		socket.on("connect", () => {
+			setIsConnected(true);
+			syncOrders();
+		});
+
 		socket.on("disconnect", () => setIsConnected(false));
 
 		socket.on("order:created", (newOrder: IncomingOrder) => {
@@ -137,13 +154,35 @@ export default function KitchenClient({ initialOrders }: { initialOrders: Incomi
 			});
 		});
 
-
 		socket.on("connect_error", (err) => {
-			console.error("Kitchen socket connection failed:", err.message);
 			setIsConnected(false);
-			toast.error("Kitchen connection failed — try refreshing or logging in again")
-		});
 
+			if (err.message === "SHIFT_EXPIRED") {
+				// Stop the client from silently retrying against a socket
+				// that will just keep getting rejected the same way.
+				socket.disconnect();
+				setPendingAction(() => async () => {
+					socket.connect();
+				});
+				setIsPinLocked(true);
+				return;
+			}
+
+			if (err.message === "DEVICE_UNAUTHORIZED" || err.message === "UNAUTHORIZED") {
+				// Device token itself is gone/invalid — PIN entry can't fix
+				// this, only a manager re-login (server-rendered). Reload so
+				// the page component re-checks cookies and redirects properly.
+				toast.error("Device session lost — reloading...");
+				socket.disconnect();
+				setTimeout(() => window.location.reload(), 1500);
+				return;
+			}
+
+			// Genuine network blip — let socket.io's own reconnection logic
+			// keep trying, just reflect it in the UI.
+			console.error("Kitchen socket connection failed:", err.message);
+			toast.error("Kitchen connection lost — retrying...");
+		});
 
 		return () => {
 			socket.off("connect");
@@ -156,12 +195,14 @@ export default function KitchenClient({ initialOrders }: { initialOrders: Incomi
 	}, []);
 
 	// --- DERIVED STATE ---
-	const tableOrders = orders.filter((o) => !o.isPickup && o.status === "active");
+	const activeTables = orders.filter((o) => !o.isPickup && o.status === "active");
+	const readyTables = orders.filter((o) => !o.isPickup && o.status === "ready");
 	const pendingPickups = orders.filter((o) => o.isPickup && o.status === "pending");
 	const activePickups = orders.filter((o) => o.isPickup && o.status === "active");
 	const readyOrders = orders.filter((o) => o.isPickup && o.status === "ready");
 
-	const filteredTables = tableOrders.filter((o) => o.orderId.toString().includes(searchTables) || (o.tableNumber?.toString().includes(searchTables)));
+	const filteredActiveTables = activeTables.filter((o) => o.orderId.toString().includes(searchTables) || (o.tableNumber?.toString().includes(searchTables)));
+	const filteredReadyTables = readyTables.filter((o) => o.orderId.toString().includes(searchTables) || (o.tableNumber?.toString().includes(searchTables)));
 	const filteredPickups = pendingPickups.filter((o) => o.orderId.toString().includes(searchPickups) || (o.customerPhone?.includes(searchPickups)));
 	const filteredReady = readyOrders.filter((o) => o.orderId.toString().includes(searchReady) || (o.customerPhone?.includes(searchReady)));
 
@@ -170,14 +211,15 @@ export default function KitchenClient({ initialOrders }: { initialOrders: Incomi
 	useEffect(() => {
 		setSeenOrders((prev) => {
 			const next = { tables: new Set(prev.tables), pickups: new Set(prev.pickups), ready: new Set(prev.ready) };
-			if (activeTab === "tables") tableOrders.forEach((o) => next.tables.add(o.orderId));
+			if (activeTab === "tables") activeTables.forEach((o) => next.tables.add(o.orderId));
 			if (activeTab === "pickups") pendingPickups.forEach((o) => next.pickups.add(o.orderId));
 			if (activeTab === "ready") readyOrders.forEach((o) => next.ready.add(o.orderId));
 			return next;
 		});
 	}, [activeTab, orders]);
 
-	const unreadTables = tableOrders.filter((o) => !seenOrders.tables.has(o.orderId)).length;
+
+	const unreadTables = activeTables.filter((o) => !seenOrders.tables.has(o.orderId)).length;
 	const unreadPickups = pendingPickups.filter((o) => !seenOrders.pickups.has(o.orderId)).length;
 	const unreadReady = readyOrders.filter((o) => !seenOrders.ready.has(o.orderId)).length;
 
@@ -274,7 +316,7 @@ export default function KitchenClient({ initialOrders }: { initialOrders: Incomi
 
 				<div className="flex gap-4 border-b border-stone-800 pb-px">
 					{[
-						{ id: "tables", label: "Tables", count: tableOrders.length, unread: unreadTables },
+						{ id: "tables", label: "Tables", count: readyOrders.length, unread: unreadTables },
 						{ id: "pickups", label: "Pickups", count: pendingPickups.length + activePickups.length, unread: unreadPickups },
 						{ id: "ready", label: "Ready", count: readyOrders.length, unread: unreadReady },
 					].map((t) => (
@@ -291,27 +333,59 @@ export default function KitchenClient({ initialOrders }: { initialOrders: Incomi
 			<main className="w-full">
 				{/* 1. TABLES TAB */}
 				{activeTab === "tables" && (
-					<div className="space-y-6">
-						<div className="relative max-w-md">
-							<Search className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-500" size={18} />
-							<input type="text" placeholder="Search Order ID or Table..." value={searchTables} onChange={(e) => setSearchTables(e.target.value)} className="w-full bg-stone-900/50 border border-stone-800 rounded-xl py-3 pl-12 pr-4 focus:ring-2 focus:ring-emerald-500/50 focus:outline-none text-stone-200" />
+					<div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+						{/* LEFT SIDE: PREPARING */}
+						<div className="bg-stone-900/50 rounded-4xl border border-stone-800 p-6">
+							<h2 className="text-xl font-black text-emerald-500 mb-6 flex items-center gap-2"><Coffee size={24} /> Preparing</h2>
+							<div className="relative mb-6">
+								<Search className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-500" size={18} />
+								<input type="text" placeholder="Search Order ID or Table..." value={searchTables} onChange={(e) => setSearchTables(e.target.value)} className="w-full bg-stone-950 border border-stone-800 rounded-xl py-3 pl-12 pr-4 focus:ring-2 focus:ring-emerald-500/50 focus:outline-none text-stone-200" />
+							</div>
+							<div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2 custom-scrollbar">
+								<AnimatePresence>
+									{filteredActiveTables.map((o) => (
+										<TicketCard
+											key={o.orderId}
+											order={o}
+											confirmState={confirmState}
+											onCancelConfirm={() => setConfirmState({ id: null, target: null, label: "" })}
+											onExecuteConfirm={() => executeStatusChange()}
+										>
+											<button onClick={() => triggerConfirm(o.orderId, "cancelled", "Cancel")} className="w-1/3 bg-stone-900 hover:bg-rose-950 text-rose-500 border border-rose-900/50 rounded-xl font-black flex justify-center items-center gap-2 transition-colors">
+												<XCircle size={18} />
+											</button>
+											<button onClick={() => triggerConfirm(o.orderId, "ready", "Ready")} className="w-2/3 bg-amber-600 hover:bg-amber-500 text-stone-950 rounded-xl font-black flex justify-center items-center gap-2 shadow-md">
+												Ready <ArrowRight size={18} />
+											</button>
+										</TicketCard>
+									))}
+								</AnimatePresence>
+							</div>
 						</div>
-						<div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
-							<AnimatePresence>
-								{filteredTables.map((o) => (
-									<TicketCard
-										key={o.orderId}
-										order={o}
-										confirmState={confirmState}
-										onCancelConfirm={() => setConfirmState({ id: null, target: null, label: "" })}
-										onExecuteConfirm={() => executeStatusChange()}
-									>
-										<button onClick={() => triggerConfirm(o.orderId, "completed", "Complete")} className="w-full h-full bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-black flex items-center justify-center gap-2 transition-transform active:scale-95 shadow-md">
-											<CheckCircle size={20} /> Mark Complete
-										</button>
-									</TicketCard>
-								))}
-							</AnimatePresence>
+
+						{/* RIGHT SIDE: READY */}
+						<div className="bg-stone-900/50 rounded-4xl border border-stone-800 p-6">
+							<h2 className="text-xl font-black text-amber-500 mb-6 flex items-center gap-2"><Bell size={24} /> Ready to Serve</h2>
+							<div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[70vh] overflow-y-auto pr-2">
+								<AnimatePresence>
+									{filteredReadyTables.map((o) => (
+										<TicketCard
+											key={o.orderId}
+											order={o}
+											confirmState={confirmState}
+											onCancelConfirm={() => setConfirmState({ id: null, target: null, label: "" })}
+											onExecuteConfirm={() => executeStatusChange()}
+										>
+											<button onClick={() => triggerConfirm(o.orderId, "active", "Revert")} className="w-1/3 bg-stone-700 hover:bg-stone-600 text-stone-300 rounded-xl font-bold flex items-center justify-center transition-colors" title="Revert to Active">
+												<Undo2 size={18} />
+											</button>
+											<button onClick={() => triggerConfirm(o.orderId, "completed", "Complete")} className="w-2/3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-black flex justify-center items-center gap-2 shadow-md">
+												<CheckCircle size={20} /> Complete
+											</button>
+										</TicketCard>
+									))}
+								</AnimatePresence>
+							</div>
 						</div>
 					</div>
 				)}
