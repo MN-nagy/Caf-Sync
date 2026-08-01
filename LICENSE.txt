@@ -1,0 +1,15 @@
+Copyright (c) 2026 Mahmoud Nagy Mohamed
+
+All Rights Reserved.
+
+This source code and its accompanying documentation are proprietary and
+confidential. No part of this repository may be copied, modified,
+distributed, sublicensed, or used, in whole or in part, without the
+prior written permission of the copyright holder.
+
+No license, express or implied, is granted to any person or entity
+obtaining access to this repository or any part of it.
+
+This software is provided "as is", without warranty of any kind, express
+or implied, including but not limited to the warranties of
+merchantability, fitness for a particular purpose, and noninfringement.
