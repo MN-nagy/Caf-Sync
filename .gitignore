@@ -13,3 +13,14 @@ out/
 # Ignore Express backend build outputs
 dist/
 build/
+
+# Platform CLI local config (not secrets, but shouldn't be committed)
+.vercel/
+.railway/
+
+# TypeScript build cache
+*.tsbuildinfo
+
+# Misc
+*.log
+.DS_Store
