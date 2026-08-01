@@ -13,6 +13,7 @@ export type Drink = {
 	priceInPiastres: number;
 	originalPriceInPiastres?: number | null;
 	category: string;
+	isOutOfStock: boolean; // NEW FIELD
 };
 
 type CartItem = Drink & { quantity: number };
@@ -30,7 +31,7 @@ export default function MenuClient({ drinks, orderType, tableNumber }: { drinks:
 
 	const router = useRouter();
 
-	const hasOffers = drinks.some(d => d.originalPriceInPiastres && d.originalPriceInPiastres > d.priceInPiastres);
+	const hasOffers = drinks.some(d => d.originalPriceInPiastres && d.originalPriceInPiastres > d.priceInPiastres && !d.isOutOfStock);
 	const baseCategories = ["All", "Hot Coffee", "Iced Coffee", "Frappe"];
 	const categories = hasOffers ? ["All", "Offers", ...baseCategories.slice(1)] : baseCategories;
 
@@ -45,12 +46,13 @@ export default function MenuClient({ drinks, orderType, tableNumber }: { drinks:
 	const filteredDrinks = drinks.filter((drink) => {
 		if (activeCategory === "All") return true;
 		if (activeCategory === "Offers") {
-			return !!(drink.originalPriceInPiastres && drink.originalPriceInPiastres > drink.priceInPiastres);
+			return !!(drink.originalPriceInPiastres && drink.originalPriceInPiastres > drink.priceInPiastres && !drink.isOutOfStock);
 		}
 		return drink.category === activeCategory;
 	});
 
 	const addToCart = (drink: Drink) => {
+		if (drink.isOutOfStock) return; // Failsafe
 		setCart((prev) => {
 			const exists = prev.find((item) => item.id === drink.id);
 			if (exists) return prev.map((item) => item.id === drink.id ? { ...item, quantity: item.quantity + 1 } : item);
@@ -107,13 +109,21 @@ export default function MenuClient({ drinks, orderType, tableNumber }: { drinks:
 			<div className="p-6 space-y-5 max-w-lg mx-auto">
 				{filteredDrinks.map((drink) => {
 					const qty = getQty(drink.id);
-					const isSale = drink.originalPriceInPiastres && drink.originalPriceInPiastres > drink.priceInPiastres;
+					const isSale = drink.originalPriceInPiastres && drink.originalPriceInPiastres > drink.priceInPiastres && !drink.isOutOfStock;
 
 					return (
-						<motion.div key={drink.id} layout initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-3xl p-6 shadow-sm border border-stone-200 relative overflow-hidden">
+						<motion.div key={drink.id} layout initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+							className={`bg-white rounded-3xl p-6 shadow-sm border border-stone-200 relative overflow-hidden transition-opacity ${drink.isOutOfStock ? "opacity-70 grayscale-[0.2]" : ""}`}>
 
 							{/* Subtle top accent line based on state */}
-							<div className={`absolute top-0 left-0 w-full h-1.5 ${isSale ? "bg-rose-500" : "bg-emerald-600/20"}`} />
+							<div className={`absolute top-0 left-0 w-full h-1.5 ${drink.isOutOfStock ? "bg-stone-300" : isSale ? "bg-rose-500" : "bg-emerald-600/20"}`} />
+
+							{/* Out of Stock Badge */}
+							{drink.isOutOfStock && (
+								<div className="absolute top-4 right-4 z-10 bg-stone-800 text-white text-[10px] font-black px-2.5 py-1 rounded-md tracking-wider">
+									SOLD OUT
+								</div>
+							)}
 
 							<div className="flex justify-between items-start mb-3 mt-1 gap-4">
 								<div>
@@ -132,7 +142,7 @@ export default function MenuClient({ drinks, orderType, tableNumber }: { drinks:
 											{formatEGP(drink.originalPriceInPiastres!)}
 										</span>
 									)}
-									<span className={`text-lg font-black px-3 py-1 rounded-xl whitespace-nowrap ${isSale ? "bg-rose-50 text-rose-700 ring-1 ring-rose-200" : "bg-emerald-50 text-emerald-700"}`}>
+									<span className={`text-lg font-black px-3 py-1 rounded-xl whitespace-nowrap ${drink.isOutOfStock ? "bg-stone-100 text-stone-500" : isSale ? "bg-rose-50 text-rose-700 ring-1 ring-rose-200" : "bg-emerald-50 text-emerald-700"}`}>
 										{formatEGP(drink.priceInPiastres)}
 									</span>
 								</div>
@@ -143,7 +153,11 @@ export default function MenuClient({ drinks, orderType, tableNumber }: { drinks:
 							</p>
 
 							<div className="flex justify-end pt-4 border-t border-stone-100">
-								{qty > 0 ? (
+								{drink.isOutOfStock ? (
+									<button disabled className="bg-stone-100 text-stone-400 px-6 py-3 rounded-2xl font-bold w-full flex items-center justify-center cursor-not-allowed">
+										Currently Unavailable
+									</button>
+								) : qty > 0 ? (
 									<div className="flex items-center gap-4 bg-stone-100 rounded-full p-1 border border-stone-200 w-36 justify-between">
 										<button onClick={() => removeFromCart(drink.id)} className="w-10 h-10 flex items-center justify-center rounded-full bg-white text-amber-900 shadow-sm hover:bg-stone-50 active:scale-90 transition-transform font-bold text-xl">-</button>
 										<span className="font-bold text-lg text-amber-900">{qty}</span>

@@ -131,9 +131,11 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error(err.message, err.stack);
 
   if (err instanceof z.ZodError) {
-    res
-      .status(400)
-      .json({ success: false, message: "Invalid input", errors: err.issues });
+    res.status(400).json({
+      success: false,
+      message: err.issues[0]?.message || "Invalid input",
+      errors: err.issues,
+    });
     return;
   }
 

@@ -382,6 +382,11 @@ export default function AdminClient({ initialDrinks }: { initialDrinks: Drink[] 
 	const totalRevenuePiastres = stats?.dailyStats.reduce((sum, d) => sum + d.revenuePiastres, 0) ?? 0;
 	const totalOrders = stats?.dailyStats.reduce((sum, d) => sum + d.orderCount, 0) ?? 0;
 	const avgOrderValuePiastres = totalOrders > 0 ? Math.round(totalRevenuePiastres / totalOrders) : 0;
+	const now = new Date();
+	const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+	const currentMonthRevenuePiastres = stats?.dailyStats
+		.filter((d) => d.date.startsWith(currentMonthKey))
+		.reduce((sum, d) => sum + d.revenuePiastres, 0) ?? 0;
 
 	const categoryOptions = Array.from(new Set(drinks.map((d) => d.category))).filter(Boolean);
 
@@ -442,6 +447,10 @@ export default function AdminClient({ initialDrinks }: { initialDrinks: Drink[] 
 											<p className="text-2xl font-black text-emerald-600">{formatEGP(totalRevenuePiastres)}</p>
 										</div>
 										<div className="bg-white p-5 rounded-2xl shadow-sm border border-stone-200">
+											<p className="text-xs font-bold text-stone-400 uppercase tracking-widest mb-1">Total Revenue (This Month)</p>
+											<p className="text-2xl font-black text-emerald-600">{formatEGP(currentMonthRevenuePiastres)}</p>
+										</div>
+										<div className="bg-white p-5 rounded-2xl shadow-sm border border-stone-200">
 											<p className="text-xs font-bold text-stone-400 uppercase tracking-widest mb-1">Total Orders (60d)</p>
 											<p className="text-2xl font-black text-amber-900">{totalOrders}</p>
 										</div>
@@ -453,17 +462,17 @@ export default function AdminClient({ initialDrinks }: { initialDrinks: Drink[] 
 
 									<div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-										{/* Revenue Curve Chart */}
+										{/* Order Curve Chart */}
 										<div className="bg-white p-6 rounded-3xl shadow-sm border border-stone-200 lg:col-span-2">
-											<h3 className="text-sm font-bold text-stone-400 uppercase tracking-widest mb-6 flex items-center gap-2"><TrendingUp size={16} /> Revenue (Last 60 Days)</h3>
+											<h3 className="text-sm font-bold text-stone-400 uppercase tracking-widest mb-6 flex items-center gap-2"><TrendingUp size={16} /> Orders (Last 60 Days)</h3>
 											<div className="h-72">
 												<ResponsiveContainer width="100%" height="100%">
-													<LineChart data={stats.dailyStats.map(s => ({ ...s, rev: s.revenuePiastres / 100 }))}>
+													<LineChart data={stats.dailyStats}>
 														<CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e7e5e4" />
 														<XAxis dataKey="date" tick={{ fontSize: 12, fill: '#78716c' }} tickLine={false} axisLine={false} />
-														<YAxis tick={{ fontSize: 12, fill: '#78716c' }} tickLine={false} axisLine={false} tickFormatter={(val) => `${val} EGP`} />
-														<Tooltip formatter={(value) => [`${value} EGP`, "Revenue"]} labelStyle={{ color: '#1c1917', fontWeight: 'bold' }} />
-														<Line type="monotone" dataKey="rev" stroke="#059669" strokeWidth={4} dot={false} activeDot={{ r: 8 }} />
+														<YAxis tick={{ fontSize: 12, fill: '#78716c' }} tickLine={false} axisLine={false} allowDecimals={false} />
+														<Tooltip formatter={(value) => [`${value} orders`, "Orders"]} labelStyle={{ color: '#1c1917', fontWeight: 'bold' }} />
+														<Line type="monotone" dataKey="orderCount" stroke="#059669" strokeWidth={4} dot={false} activeDot={{ r: 8 }} />
 													</LineChart>
 												</ResponsiveContainer>
 											</div>

@@ -2,7 +2,13 @@ import type { Request, Response, NextFunction } from "express";
 import { drinks, orders, orderItems } from "../db/schema.ts";
 import { db } from "../db/index.ts";
 import { eq, asc, inArray } from "drizzle-orm";
-import { z } from "zod";
+import { z, ZodError } from "zod";
+import jwt from "jsonwebtoken";
+
+if (!process.env.JWT_SECRET) {
+  throw new Error("FATAL: JWT_SECRET environment variable is missing.");
+}
+const JWT_SECRET = process.env.JWT_SECRET;
 
 const orderItemSchema = z.object({
   drinkId: z.number().int().positive(),
@@ -31,6 +37,7 @@ const statusSchema = z.object({
 
 const phoneSchema = z.object({
   customerPhone: z.string().min(5).max(20),
+  orderToken: z.string().min(10),
 });
 
 export const addOrder = async (
@@ -64,10 +71,22 @@ export const addOrder = async (
       for (const item of items) {
         const drink = priceMap.get(item.drinkId);
         if (!drink) {
-          throw new Error(`Invalid drink ID: ${item.drinkId}`);
+          throw new ZodError([
+            {
+              code: "custom",
+              path: ["drinkId"],
+              message: `Invalid drink ID: ${item.drinkId}`,
+            },
+          ]);
         }
         if (drink.isOutOfStock) {
-          throw new Error(`Drink ID ${item.drinkId} is out of stock`);
+          throw new ZodError([
+            {
+              code: "custom",
+              path: ["drinkId"],
+              message: `Drink ID ${item.drinkId} is out of stock`,
+            },
+          ]);
         }
         computedTotal += drink.price * item.quantity;
 
@@ -116,7 +135,9 @@ export const addOrder = async (
       });
     }
 
-    res.status(201).json({ success: true, orderId: orderId });
+    const orderToken = jwt.sign({ orderId }, JWT_SECRET, { expiresIn: "2h" });
+
+    res.status(201).json({ success: true, orderId, orderToken });
   } catch (error) {
     next(error);
   }
@@ -214,7 +235,24 @@ export const updateOrderPhone = async (
 ): Promise<void> => {
   try {
     const { id: orderId } = idParamSchema.parse(req.params);
-    const { customerPhone } = phoneSchema.parse(req.body);
+    const { customerPhone, orderToken } = phoneSchema.parse(req.body);
+
+    let decoded: { orderId: number };
+    try {
+      decoded = jwt.verify(orderToken, JWT_SECRET) as { orderId: number };
+    } catch {
+      res
+        .status(403)
+        .json({ success: false, message: "Invalid or expired order token" });
+      return;
+    }
+
+    if (decoded.orderId !== orderId) {
+      res
+        .status(403)
+        .json({ success: false, message: "Token does not match this order" });
+      return;
+    }
 
     const updated = await db
       .update(orders)

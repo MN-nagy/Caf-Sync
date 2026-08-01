@@ -100,7 +100,7 @@ export const verifyPin = async (
     // Generate the 24-Hour Shift Token
     res.cookie("shiftToken", shiftToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: true,
       sameSite: "lax",
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
     });
@@ -119,7 +119,7 @@ export const logout = async (
   try {
     res.clearCookie("deviceToken", {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: true,
       sameSite: "lax",
     });
     res.clearCookie("shiftToken", {
