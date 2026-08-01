@@ -71,12 +71,22 @@ export const requireShift = (
   }
 };
 
+/**
+ * MANAGER-ONLY AUTH:
+ * Requires a valid device token with role "manager". Used for admin
+ * routes (menu edits, stats) — does not require the barista shift PIN.
+ */
 export const requireManager = (
   req: Request,
   res: Response,
   next: NextFunction,
-) => {
+): void => {
   try {
+    const JWT_SECRET = process.env.JWT_SECRET!;
+    if (!JWT_SECRET) {
+      throw new Error("JWT_SECRET is missing in middleware");
+    }
+
     const deviceToken = req.cookies?.deviceToken;
     if (!deviceToken) {
       res
@@ -84,19 +94,23 @@ export const requireManager = (
         .json({ success: false, message: "Manager login required" });
       return;
     }
+
     const decoded = jwt.verify(
       deviceToken,
-      process.env.JWT_SECRET!,
+      JWT_SECRET,
     ) as unknown as AuthPayload;
+
     if (decoded.role !== "manager") {
       res
         .status(403)
         .json({ success: false, message: "Manager access required" });
       return;
     }
+
     req.user = decoded;
     next();
-  } catch {
+  } catch (error) {
+    console.error("requireManager Auth Error:", error);
     res.status(401).json({ success: false, message: "Invalid session" });
   }
 };

@@ -115,10 +115,7 @@ export default function KitchenClient({ initialOrders }: { initialOrders: Incomi
 
 	// --- WEBSOCKETS ---
 	useEffect(() => {
-		const socket: Socket = io(SERVER_URL, { withCredentials: true });
-		socket.on("connect", () => setIsConnected(true));
-		socket.on("disconnect", () => setIsConnected(false));
-
+		const socket: Socket = io(`${SERVER_URL}/kitchen`, { withCredentials: true });
 		socket.on("order:created", (newOrder: IncomingOrder) => {
 			setOrders((prev) => prev.some((o) => o.orderId === newOrder.orderId) ? prev : [...prev, newOrder]);
 		});
@@ -130,6 +127,12 @@ export default function KitchenClient({ initialOrders }: { initialOrders: Incomi
 				}
 				return prev.map((o) => (o.orderId === orderId ? { ...o, status } : o));
 			});
+		});
+
+		socket.on("connect_error", (err) => {
+			console.error("Kitchen socket connection failed:", err.message);
+			setIsConnected(false);
+			toast.error("Kitchen connection failed — try refreshing or logging in again")
 		});
 
 		return () => {
