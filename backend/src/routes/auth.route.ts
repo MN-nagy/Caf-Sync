@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { login, verifyPin } from "../controllers/auth.controller.ts";
+import { login, verifyPin, logout } from "../controllers/auth.controller.ts";
 import rateLimit from "express-rate-limit";
 
 const rateLimiter = rateLimit({
@@ -14,5 +14,6 @@ authRouter.use(rateLimiter);
 
 authRouter.post("/login", login);
 authRouter.post("/verify-pin", verifyPin);
+authRouter.post("/logout", logout);
 
 export default authRouter;

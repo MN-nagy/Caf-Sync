@@ -110,3 +110,25 @@ export const verifyPin = async (
     next(error);
   }
 };
+
+export const logout = async (
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    res.clearCookie("deviceToken", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+    });
+    res.clearCookie("shiftToken", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+    });
+    res.json({ success: true, message: "Logged out" });
+  } catch (error) {
+    next(error);
+  }
+};

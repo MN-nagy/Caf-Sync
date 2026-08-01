@@ -6,8 +6,10 @@ import { z } from "zod";
 
 const updateDrinkSchema = z.object({
   name: z.string().min(1).max(100).optional(),
+  description: z.string().max(2000).nullable().optional(),
+  category: z.string().min(1).max(255).optional(),
   priceInPiastres: z.number().int().positive().optional(),
-  originalPriceInPiastres: z.number().int().positive().nullish(),
+  originalPriceInPiastres: z.number().int().positive().nullable().optional(),
   isOutOfStock: z.boolean().optional(),
 });
 
@@ -22,8 +24,10 @@ export const updateDrinkInfo = async (
 ): Promise<void> => {
   try {
     const { id } = paramsSchema.parse(req.params);
-    const data = updateDrinkSchema.parse(req.body); // schema without the refine
+    const data = updateDrinkSchema.parse(req.body);
 
+    // Fetch the current row so we can validate against the merged
+    // result, not just whatever fields happen to be in this PATCH.
     const [currentDrink] = await db
       .select()
       .from(drinks)
@@ -34,19 +38,19 @@ export const updateDrinkInfo = async (
       return;
     }
 
-    // What the row will look like AFTER this patch is applied —
-    // falling back to the existing value for anything not sent.
     const mergedPrice = data.priceInPiastres ?? currentDrink.priceInPiastres;
     const mergedOriginalPrice =
       data.originalPriceInPiastres !== undefined
         ? data.originalPriceInPiastres
         : currentDrink.originalPriceInPiastres;
 
+    // A "was" price only makes sense if it's actually higher than
+    // what's charged. null/undefined means "no discount" and is fine.
     if (mergedOriginalPrice != null && mergedOriginalPrice <= mergedPrice) {
       res.status(400).json({
         success: false,
         message:
-          "originalPriceInPiastres must be higher than price to represent a discount",
+          "originalPriceInPiastres must be higher than priceInPiastres to represent a discount",
       });
       return;
     }
@@ -57,14 +61,22 @@ export const updateDrinkInfo = async (
       .where(eq(drinks.id, id))
       .returning();
 
+    if (!updatedDrink.length) {
+      res.status(404).json({ success: false, message: "Drink not found" });
+      return;
+    }
+
     const io = req.app.get("io");
-    io.emit("drink:updated", updatedDrink[0]);
+    if (io) {
+      io.emit("drink:updated", updatedDrink[0]);
+    }
 
     res.json({ success: true, data: updatedDrink[0] });
   } catch (error) {
     next(error);
   }
 };
+
 // ---------------------------------------------------------
 // 2. ANALYTICS & STATS ROUTES
 // ---------------------------------------------------------
@@ -90,17 +102,17 @@ export const getStats = async (
       .groupBy(sql`DATE(${orders.createdAt})`)
       .orderBy(sql`DATE(${orders.createdAt})`);
 
-    // STAT 2: Item Popularity (FIXED: Joined with drinks table)
+    // STAT 2: Item Popularity
     const itemPopularity = await db
       .select({
-        name: drinks.name, // Changed from orderItems.drinkName
+        name: drinks.name,
         salesCount: sql<number>`CAST(SUM(${orderItems.quantity}) AS INT)`,
       })
       .from(orderItems)
       .innerJoin(orders, eq(orderItems.orderId, orders.id))
-      .innerJoin(drinks, eq(orderItems.drinkId, drinks.id)) // NEW JOIN
+      .innerJoin(drinks, eq(orderItems.drinkId, drinks.id))
       .where(gte(orders.createdAt, sixtyDaysAgo))
-      .groupBy(drinks.name) // Changed from orderItems.drinkName
+      .groupBy(drinks.name)
       .orderBy(desc(sql`SUM(${orderItems.quantity})`))
       .limit(10);
 
