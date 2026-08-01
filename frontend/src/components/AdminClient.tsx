@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, FormEvent } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Lock, LayoutDashboard, Coffee, LogOut, TrendingUp, AlertCircle, Save } from "lucide-react";
+import { Lock, LayoutDashboard, Coffee, LogOut, TrendingUp, AlertCircle, Save, Settings, Plus, Trash2, KeyRound } from "lucide-react";
 import { Toaster, toast } from 'sonner';
 import {
 	LineChart, Line, BarChart, Bar,
@@ -25,6 +25,8 @@ type Stats = {
 	itemPopularity: { name: string; salesCount: number }[];
 	peakHours: { hour: string; orderCount: number }[];
 };
+
+type CafeTable = { id: number; number: number; isActive: boolean };
 
 type FieldKey = "priceInPiastres" | "originalPriceInPiastres" | "description" | "category";
 
@@ -52,7 +54,7 @@ export default function AdminClient({ initialDrinks }: { initialDrinks: Drink[] 
 
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
-	const [activeTab, setActiveTab] = useState<"dashboard" | "menu">("dashboard");
+	const [activeTab, setActiveTab] = useState<"dashboard" | "menu" | "settings">("dashboard");
 
 	const [stats, setStats] = useState<Stats | null>(null);
 	const [drinks, setDrinks] = useState<Drink[]>(initialDrinks);
@@ -68,6 +70,14 @@ export default function AdminClient({ initialDrinks }: { initialDrinks: Drink[] 
 	// back to displaying the real value from `drinks`.
 	const [rawInputs, setRawInputs] = useState<Record<string, string>>({});
 
+	const [tables, setTables] = useState<CafeTable[]>([]);
+	const [newTableNumber, setNewTableNumber] = useState("");
+	const [newDrinkForm, setNewDrinkForm] = useState({ name: "", category: "", description: "", priceInPiastres: "" });
+	const [addingDrink, setAddingDrink] = useState(false);
+	const [newPin, setNewPin] = useState("");
+	const [confirmPin, setConfirmPin] = useState("");
+	const [changingPin, setChangingPin] = useState(false);
+
 	// --- SESSION CHECK ON LOAD ---
 	useEffect(() => {
 		(async () => {
@@ -80,6 +90,7 @@ export default function AdminClient({ initialDrinks }: { initialDrinks: Drink[] 
 					setStats(data);
 					setIsAuthenticated(true);
 				}
+				fetchTables();
 			} catch (error) {
 				console.error("Session check failed:", error);
 			} finally {
@@ -112,6 +123,7 @@ export default function AdminClient({ initialDrinks }: { initialDrinks: Drink[] 
 			setIsAuthenticated(true);
 			toast.success("Access Granted");
 			fetchStats();
+			fetchTables();
 		} catch (error: any) {
 			toast.error(error.message || "Login failed");
 		} finally {
@@ -153,6 +165,20 @@ export default function AdminClient({ initialDrinks }: { initialDrinks: Drink[] 
 		}
 	};
 
+	const fetchTables = async () => {
+		try {
+			const res = await fetch(`${SERVER_URL}/api/admin/tables`, { credentials: "include" });
+			if (!res.ok) {
+				if (res.status === 401 || res.status === 403) setIsAuthenticated(false);
+				throw new Error("Failed to load tables");
+			}
+			setTables(await res.json());
+		} catch (error) {
+			console.error(error);
+			toast.error("Failed to load tables");
+		}
+	};
+
 	// --- MENU MANAGEMENT ---
 
 	// Returns true on success, false on failure — callers use this to
@@ -190,6 +216,137 @@ export default function AdminClient({ initialDrinks }: { initialDrinks: Drink[] 
 			toast.error("Network error — could not reach server");
 			setDrinks((prev) => prev.map((d) => (d.id === id ? previous : d)));
 			return false;
+		}
+	};
+
+	const handleAddTable = async (e: FormEvent<HTMLFormElement>) => {
+		e.preventDefault();
+		const num = parseInt(newTableNumber, 10);
+		if (isNaN(num) || num <= 0) { toast.error("Enter a valid table number"); return; }
+		try {
+			const res = await fetch(`${SERVER_URL}/api/admin/tables`, {
+				method: "POST", headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ number: num }), credentials: "include",
+			});
+			const data = await res.json().catch(() => ({}));
+			if (!res.ok) {
+				if (res.status === 401 || res.status === 403) setIsAuthenticated(false);
+				throw new Error(data.message || "Failed to add table");
+			}
+			setTables((prev) => [...prev, data.data].sort((a, b) => a.number - b.number));
+			setNewTableNumber("");
+			toast.success(`Table ${num} added`);
+		} catch (error: any) {
+			toast.error(error.message || "Failed to add table");
+		}
+	};
+
+	const handleToggleTable = async (table: CafeTable) => {
+		const previous = tables;
+		setTables((prev) => prev.map((t) => (t.id === table.id ? { ...t, isActive: !t.isActive } : t)));
+		try {
+			const res = await fetch(`${SERVER_URL}/api/admin/tables/${table.id}`, {
+				method: "PATCH", headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ isActive: !table.isActive }), credentials: "include",
+			});
+			if (!res.ok) {
+				if (res.status === 401 || res.status === 403) setIsAuthenticated(false);
+				throw new Error("Failed");
+			}
+		} catch {
+			setTables(previous);
+			toast.error("Failed to update table");
+		}
+	};
+
+	const handleRemoveTable = async (table: CafeTable) => {
+		const previous = tables;
+		setTables((prev) => prev.filter((t) => t.id !== table.id));
+		try {
+			const res = await fetch(`${SERVER_URL}/api/admin/tables/${table.id}`, { method: "DELETE", credentials: "include" });
+			if (!res.ok) {
+				if (res.status === 401 || res.status === 403) setIsAuthenticated(false);
+				throw new Error("Failed");
+			}
+			toast.success(`Table ${table.number} removed`);
+		} catch {
+			setTables(previous);
+			toast.error("Failed to remove table");
+		}
+	};
+
+	const handleAddDrink = async (e: FormEvent<HTMLFormElement>) => {
+		e.preventDefault();
+		const price = parseFloat(newDrinkForm.priceInPiastres);
+		if (!newDrinkForm.name.trim() || !newDrinkForm.category.trim() || isNaN(price) || price <= 0) {
+			toast.error("Fill in a name, category, and valid price");
+			return;
+		}
+		setAddingDrink(true);
+		try {
+			const res = await fetch(`${SERVER_URL}/api/admin/menu`, {
+				method: "POST", headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					name: newDrinkForm.name,
+					category: newDrinkForm.category,
+					description: newDrinkForm.description || null,
+					priceInPiastres: Math.round(price * 100),
+				}),
+				credentials: "include",
+			});
+			const data = await res.json().catch(() => ({}));
+			if (!res.ok) {
+				if (res.status === 401 || res.status === 403) setIsAuthenticated(false);
+				throw new Error(data.message || "Failed to add item");
+			}
+			setDrinks((prev) => [...prev, data.data]);
+			setNewDrinkForm({ name: "", category: "", description: "", priceInPiastres: "" });
+			toast.success("Menu item added");
+		} catch (error: any) {
+			toast.error(error.message || "Failed to add item");
+		} finally {
+			setAddingDrink(false);
+		}
+	};
+
+	const handleArchiveDrink = async (drink: Drink) => {
+		if (!confirm(`Remove "${drink.name}" from the menu? Past orders keep referencing it — it just won't show to customers anymore.`)) return;
+		const previous = drinks;
+		setDrinks((prev) => prev.filter((d) => d.id !== drink.id));
+		try {
+			const res = await fetch(`${SERVER_URL}/api/admin/menu/${drink.id}`, { method: "DELETE", credentials: "include" });
+			if (!res.ok) {
+				if (res.status === 401 || res.status === 403) setIsAuthenticated(false);
+				throw new Error("Failed");
+			}
+			toast.success(`${drink.name} removed from menu`);
+		} catch {
+			setDrinks(previous);
+			toast.error("Failed to remove item");
+		}
+	};
+
+	const handleChangePin = async (e: FormEvent<HTMLFormElement>) => {
+		e.preventDefault();
+		if (!/^\d{4}$/.test(newPin)) { toast.error("PIN must be exactly 4 digits"); return; }
+		if (newPin !== confirmPin) { toast.error("PINs don't match"); return; }
+		setChangingPin(true);
+		try {
+			const res = await fetch(`${SERVER_URL}/api/admin/pin`, {
+				method: "PATCH", headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ newPin }), credentials: "include",
+			});
+			const data = await res.json().catch(() => ({}));
+			if (!res.ok) {
+				if (res.status === 401 || res.status === 403) setIsAuthenticated(false);
+				throw new Error(data.message || "Failed to update PIN");
+			}
+			toast.success("Kitchen PIN updated");
+			setNewPin(""); setConfirmPin("");
+		} catch (error: any) {
+			toast.error(error.message || "Failed to update PIN");
+		} finally {
+			setChangingPin(false);
 		}
 	};
 
@@ -411,6 +568,12 @@ export default function AdminClient({ initialDrinks }: { initialDrinks: Drink[] 
 							className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${activeTab === "menu" ? "bg-amber-50 text-amber-900" : "text-stone-500 hover:bg-stone-50"}`}
 						>
 							<Coffee size={20} /> Menu Manager
+						</button>
+						<button
+							onClick={() => setActiveTab("settings")}
+							className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors ${activeTab === "settings" ? "bg-amber-50 text-amber-900" : "text-stone-500 hover:bg-stone-50"}`}
+						>
+							<Settings size={20} /> Settings
 						</button>
 					</nav>
 				</div>
@@ -643,6 +806,78 @@ export default function AdminClient({ initialDrinks }: { initialDrinks: Drink[] 
 							<p className="mt-4 text-sm text-stone-500 flex items-center gap-1">
 								<AlertCircle size={16} /> To set a discount, add a higher Original Price. To remove a discount, delete the Original Price.
 							</p>
+						</motion.div>
+					)}
+
+					{/* TAB 3: Settings */}
+					{activeTab === "settings" && (
+						<motion.div key="settings" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-8">
+							<h2 className="text-3xl font-black text-stone-800 mb-2">Store Settings</h2>
+
+							{/* TABLES */}
+							<div className="bg-white rounded-3xl shadow-sm border border-stone-200 p-6">
+								<h3 className="text-lg font-black text-stone-800 mb-4">Tables</h3>
+								<form onSubmit={handleAddTable} className="flex gap-3 mb-6">
+									<input type="number" min={1} placeholder="Table number" value={newTableNumber} onChange={(e) => setNewTableNumber(e.target.value)} className="w-40 bg-stone-100 border-none rounded-xl px-4 py-2.5 font-bold text-stone-700 focus:ring-2 focus:ring-amber-500" />
+									<button type="submit" className="bg-amber-900 hover:bg-amber-800 text-white font-bold px-5 py-2.5 rounded-xl flex items-center gap-2"><Plus size={16} /> Add Table</button>
+								</form>
+								<div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
+									{tables.map((table) => (
+										<div key={table.id} className={`rounded-2xl p-3 border flex flex-col items-center gap-2 ${table.isActive ? "bg-emerald-50 border-emerald-200" : "bg-stone-100 border-stone-200"}`}>
+											<span className={`text-xl font-black ${table.isActive ? "text-emerald-700" : "text-stone-400"}`}>{table.number}</span>
+											<div className="flex gap-1.5 w-full">
+												<button onClick={() => handleToggleTable(table)} className={`flex-1 text-[10px] font-bold uppercase px-2 py-1 rounded-lg ${table.isActive ? "bg-emerald-600 text-white hover:bg-emerald-700" : "bg-stone-300 text-stone-600 hover:bg-stone-400"}`}>
+													{table.isActive ? "On" : "Off"}
+												</button>
+												<button onClick={() => handleRemoveTable(table)} className="px-2 py-1 rounded-lg bg-rose-50 text-rose-500 hover:bg-rose-100"><Trash2 size={12} /></button>
+											</div>
+										</div>
+									))}
+									{tables.length === 0 && <p className="col-span-full text-sm text-stone-400">No tables yet — add one above.</p>}
+								</div>
+							</div>
+
+							{/* ADD MENU ITEM */}
+							<div className="bg-white rounded-3xl shadow-sm border border-stone-200 p-6">
+								<h3 className="text-lg font-black text-stone-800 mb-4">Add Menu Item</h3>
+								<form onSubmit={handleAddDrink} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+									<input type="text" placeholder="Item name" value={newDrinkForm.name} onChange={(e) => setNewDrinkForm((prev) => ({ ...prev, name: e.target.value }))} className="bg-stone-100 border-none rounded-xl px-4 py-2.5 font-bold text-stone-700 focus:ring-2 focus:ring-amber-500" />
+									<input type="text" list="category-options" placeholder="Category" value={newDrinkForm.category} onChange={(e) => setNewDrinkForm((prev) => ({ ...prev, category: e.target.value }))} className="bg-stone-100 border-none rounded-xl px-4 py-2.5 font-semibold text-stone-700 focus:ring-2 focus:ring-amber-500" />
+									<input type="number" step="0.01" placeholder="Price (EGP)" value={newDrinkForm.priceInPiastres} onChange={(e) => setNewDrinkForm((prev) => ({ ...prev, priceInPiastres: e.target.value }))} className="bg-stone-100 border-none rounded-xl px-4 py-2.5 font-bold text-stone-700 focus:ring-2 focus:ring-amber-500" />
+									<input type="text" placeholder="Description (optional)" value={newDrinkForm.description} onChange={(e) => setNewDrinkForm((prev) => ({ ...prev, description: e.target.value }))} className="bg-stone-100 border-none rounded-xl px-4 py-2.5 text-stone-600 focus:ring-2 focus:ring-amber-500" />
+									<button type="submit" disabled={addingDrink} className="md:col-span-2 bg-amber-900 hover:bg-amber-800 disabled:opacity-60 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2">
+										<Plus size={16} /> {addingDrink ? "Adding..." : "Add Item"}
+									</button>
+								</form>
+							</div>
+
+							{/* REMOVE MENU ITEMS */}
+							<div className="bg-white rounded-3xl shadow-sm border border-stone-200 p-6">
+								<h3 className="text-lg font-black text-stone-800 mb-4">Remove Menu Items</h3>
+								<div className="divide-y divide-stone-100">
+									{drinks.map((drink) => (
+										<div key={drink.id} className="flex items-center justify-between py-3">
+											<div>
+												<p className="font-bold text-stone-800">{drink.name}</p>
+												<p className="text-xs text-stone-400">{drink.category}</p>
+											</div>
+											<button onClick={() => handleArchiveDrink(drink)} className="text-rose-500 hover:bg-rose-50 p-2 rounded-lg"><Trash2 size={16} /></button>
+										</div>
+									))}
+								</div>
+							</div>
+
+							{/* KITCHEN PIN */}
+							<div className="bg-white rounded-3xl shadow-sm border border-stone-200 p-6 max-w-md">
+								<h3 className="text-lg font-black text-stone-800 mb-4 flex items-center gap-2"><KeyRound size={18} /> Kitchen PIN</h3>
+								<form onSubmit={handleChangePin} className="space-y-3">
+									<input type="password" inputMode="numeric" maxLength={4} placeholder="New 4-digit PIN" value={newPin} onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ""))} className="w-full bg-stone-100 border-none rounded-xl px-4 py-2.5 text-center tracking-[0.5em] font-bold text-stone-700 focus:ring-2 focus:ring-amber-500" />
+									<input type="password" inputMode="numeric" maxLength={4} placeholder="Confirm PIN" value={confirmPin} onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ""))} className="w-full bg-stone-100 border-none rounded-xl px-4 py-2.5 text-center tracking-[0.5em] font-bold text-stone-700 focus:ring-2 focus:ring-amber-500" />
+									<button type="submit" disabled={changingPin} className="w-full bg-amber-900 hover:bg-amber-800 disabled:opacity-60 text-white font-bold py-3 rounded-xl">
+										{changingPin ? "Updating..." : "Update PIN"}
+									</button>
+								</form>
+							</div>
 						</motion.div>
 					)}
 				</AnimatePresence>

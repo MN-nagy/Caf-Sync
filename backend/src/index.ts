@@ -11,6 +11,7 @@ import orderRouter from "./routes/order.route.ts";
 import authRouter from "./routes/auth.route.ts";
 import adminRouter from "./routes/admin.route.ts";
 import cookieParser from "cookie-parser";
+import tablesRouter from "./routes/tables.route.ts";
 import { pool } from "./db/index.ts";
 import type { AuthPayload } from "./types/express.d.ts";
 
@@ -65,6 +66,8 @@ app.use("/api/menu", menuRouter);
 app.use("/api/orders", orderRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/admin", adminRouter);
+// ...
+app.use("/api/tables", tablesRouter);
 
 // websocket
 app.set("io", io); // making io accessible via req.app.get("io")
