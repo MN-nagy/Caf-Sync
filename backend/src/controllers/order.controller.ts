@@ -42,12 +42,14 @@ export const addOrder = async (
     const { isPickup, tableNumber, items, customerPhone } =
       addOrderSchema.parse(req.body);
 
-    const generatedOrderId = await db.transaction(async (tx) => {
+    // CHANGE 3: We now return BOTH the orderId and the enrichedItems from the transaction
+    const { orderId, enrichedItems } = await db.transaction(async (tx) => {
       const drinkIds = items.map((item) => item.drinkId);
 
       const menuItems = await tx
         .select({
           id: drinks.id,
+          name: drinks.name, // CHANGE 1: We explicitly select the name from the DB now
           price: drinks.priceInPiastres,
           isOutOfStock: drinks.isOutOfStock,
         })
@@ -56,9 +58,9 @@ export const addOrder = async (
 
       const priceMap = new Map(menuItems.map((d) => [d.id, d]));
 
-      // Server computes the total from actual DB prices — never trust
-      // a total sent by the client.
       let computedTotal = 0;
+      const formattedItemsForSocket = []; // CHANGE 2: Create a new array just for the frontend
+
       for (const item of items) {
         const drink = priceMap.get(item.drinkId);
         if (!drink) {
@@ -68,6 +70,12 @@ export const addOrder = async (
           throw new Error(`Drink ID ${item.drinkId} is out of stock`);
         }
         computedTotal += drink.price * item.quantity;
+
+        // Push the exact format the KDS expects
+        formattedItemsForSocket.push({
+          drinkName: drink.name,
+          quantity: item.quantity,
+        });
       }
 
       const [newOrder] = await tx
@@ -93,22 +101,22 @@ export const addOrder = async (
 
       await tx.insert(orderItems).values(itemsToInsert);
 
-      return newOrder.id;
+      return { orderId: newOrder.id, enrichedItems: formattedItemsForSocket };
     });
 
     const io = req.app.get("io");
     if (io) {
       io.of("/kitchen").emit("order:created", {
-        orderId: generatedOrderId,
+        orderId: orderId,
         tableNumber,
         isPickup,
         customerPhone,
         status: isPickup ? "pending" : "active",
-        items,
+        items: enrichedItems, // CHANGE 4: Emit the names instead of the IDs!
       });
     }
 
-    res.status(201).json({ success: true, orderId: generatedOrderId });
+    res.status(201).json({ success: true, orderId: orderId });
   } catch (error) {
     next(error);
   }
