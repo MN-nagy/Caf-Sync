@@ -1,25 +1,39 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, FormEvent } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, MapPin } from "lucide-react";
 
+const SERVER_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+
 export default function SetupPage() {
 	const router = useRouter();
 	const [tableNumber, setTableNumber] = useState<string>("");
+	const [availableTables, setAvailableTables] = useState<number[]>([]);
 
-	// Assuming the cafe has 25 tables. We create an array [1, 2, 3... 25]
-	const availableTables = Array.from({ length: 25 }, (_, i) => i + 1);
+	useEffect(() => {
+		(async () => {
+			try {
+				const res = await fetch(`${SERVER_URL}/api/tables`);
+				if (res.ok) {
+					const data = await res.json();
+					setAvailableTables(Array.isArray(data) ? data.map((t: { number: number }) => t.number) : []);
+				}
+			} catch (error) {
+				console.error("Failed to load tables:", error);
+			}
+		})();
+	}, []);
 
 	const handleSelectTable = (num: number) => {
-		// When they click a table, we route them to the menu with their table number
 		router.push(`/menu?type=dine-in&table=${num}`);
 	};
 
-	const handleManualSubmit = (e: React.SubmitEvent<HTMLFormElement>) => {
+	const handleManualSubmit = (e: FormEvent<HTMLFormElement>) => {
 		e.preventDefault();
-		if (tableNumber && Number(tableNumber) > 0 && Number(tableNumber) <= 25) {
+		const parsed = Number(tableNumber);
+		if (tableNumber && availableTables.includes(parsed)) {
 			router.push(`/menu?type=dine-in&table=${tableNumber}`);
 		}
 	};

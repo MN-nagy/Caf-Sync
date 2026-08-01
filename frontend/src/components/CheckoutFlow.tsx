@@ -30,6 +30,7 @@ export default function CheckoutFlow({
 	);
 	const [loading, setLoading] = useState(false);
 	const [orderId, setOrderId] = useState<number | null>(null);
+	const [orderToken, setOrderToken] = useState<string | null>(null);
 
 	const router = useRouter();
 	const autoSubmittedRef = useRef(false);
@@ -77,7 +78,7 @@ export default function CheckoutFlow({
 				const res = await fetch(`${SERVER_URL}/api/orders/${orderId}/phone`, {
 					method: "PATCH",
 					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({ customerPhone: cleanedPhone }),
+					body: JSON.stringify({ customerPhone: cleanedPhone, orderToken }),
 				});
 
 				if (!res.ok) {
@@ -111,6 +112,8 @@ export default function CheckoutFlow({
 			if (!res.ok) throw new Error(data.message || "Failed to place order");
 
 			setOrderId(data.orderId);
+			setOrderId(data.orderId);
+			setOrderToken(data.orderToken);
 
 			if (!isPickup) {
 				setStep("success");
@@ -348,7 +351,7 @@ export default function CheckoutFlow({
 
 							{/* Payment Instructions */}
 							<div className="bg-white border border-stone-200 rounded-4xl p-8 shadow-xl relative overflow-hidden">
-								<div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-600 to-emerald-600" />
+								<div className="absolute top-0 left-0 w-full h-1 bg-linear-to-r from-amber-600 to-emerald-600" />
 
 								<div className="text-center mb-6">
 									<h2 className="text-2xl font-black mt-2 text-amber-900">

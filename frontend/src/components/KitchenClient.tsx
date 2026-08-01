@@ -316,7 +316,7 @@ export default function KitchenClient({ initialOrders }: { initialOrders: Incomi
 
 				<div className="flex gap-4 border-b border-stone-800 pb-px">
 					{[
-						{ id: "tables", label: "Tables", count: readyOrders.length, unread: unreadTables },
+						{ id: "tables", label: "Tables", count: activeTables.length + readyTables.length, unread: unreadTables },
 						{ id: "pickups", label: "Pickups", count: pendingPickups.length + activePickups.length, unread: unreadPickups },
 						{ id: "ready", label: "Ready", count: readyOrders.length, unread: unreadReady },
 					].map((t) => (

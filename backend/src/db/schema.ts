@@ -25,10 +25,9 @@ export const drinks = pgTable("drinks", {
   description: text("description"), // e.g., "Espresso and milk..."
   priceInPiastres: integer("price_in_piastres").notNull(), // See note below!
   isOutOfStock: boolean("is_out_of_stock").default(false), // Admin can flip this
-
-  // new
   originalPriceInPiastres: integer("original_price_in_piastres"),
   category: varchar("category", { length: 255 }),
+  isArchived: boolean("is_archived").default(false),
 });
 
 // 2. The Main Ticket (Orders)
@@ -73,4 +72,10 @@ export const adminCredentials = pgTable("admin_credentials", {
   kitchenPassword: text("kitchen_password_hash").notNull(), // The meat-grinder version of the password
   kitchenPinHash: text("kitchen_pin_hash").notNull(), // The meat-grinder version of the 4-digit PIN
   updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const cafeTables = pgTable("cafe_tables", {
+  id: serial("id").primaryKey(),
+  number: integer("number").notNull().unique(),
+  isActive: boolean("is_active").default(true),
 });
