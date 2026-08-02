@@ -59,7 +59,11 @@ app.use(
 );
 app.use(express.json());
 app.use(cookieParser());
-app.use(helmet());
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  }),
+);
 
 // API endpoints
 app.use("/api/menu", menuRouter);
