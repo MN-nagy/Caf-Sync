@@ -10,6 +10,8 @@ if (!process.env.JWT_SECRET) {
 }
 const JWT_SECRET = process.env.JWT_SECRET;
 
+const isCrossSiteDev = process.env.COOKIE_CROSS_SITE === "true";
+
 export const login = async (
   req: Request,
   res: Response,
@@ -48,11 +50,10 @@ export const login = async (
     });
 
     res.cookie("deviceToken", deviceToken, {
-      httpOnly: true, // prevents JavaScript/XSS theft
+      httpOnly: true,
       secure: true,
-      sameSite: "lax", // protection against CSRF
-      // domain: ".cafe.com", // leading . matching app and api
-      maxAge: 30 * 24 * 60 * 60 * 1000, // 30d
+      sameSite: isCrossSiteDev ? "none" : "lax",
+      maxAge: 30 * 24 * 60 * 60 * 1000,
     });
 
     res.json({ success: true, message: "Logged in successfully" });
@@ -101,8 +102,8 @@ export const verifyPin = async (
     res.cookie("shiftToken", shiftToken, {
       httpOnly: true,
       secure: true,
-      sameSite: "lax",
-      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+      sameSite: isCrossSiteDev ? "none" : "lax",
+      maxAge: 24 * 60 * 60 * 1000,
     });
 
     res.json({ success: true, message: "Shift started" });
@@ -120,12 +121,12 @@ export const logout = async (
     res.clearCookie("deviceToken", {
       httpOnly: true,
       secure: true,
-      sameSite: "lax",
+      sameSite: isCrossSiteDev ? "none" : "lax",
     });
     res.clearCookie("shiftToken", {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      secure: true,
+      sameSite: isCrossSiteDev ? "none" : "lax",
     });
     res.json({ success: true, message: "Logged out" });
   } catch (error) {
