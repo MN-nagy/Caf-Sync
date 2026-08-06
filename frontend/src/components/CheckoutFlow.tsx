@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Coffee, CheckCircle2, Phone, ArrowRight, X, Edit2, AlertCircle, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { siteConfig } from "@/config/site";
 
 type CartItem = { drinkId: number; drinkName: string; quantity: number };
 
@@ -53,6 +54,12 @@ export default function CheckoutFlow({
 		const cleaned = normalizeEgyptianPhone(number);
 		const phoneRegex = /^(010|011|012|015)\d{8}$/;
 		return phoneRegex.test(cleaned);
+	};
+
+	// converting phonenumber to a what'sapp click-to-chat link
+	const buildWhatsAppLink = (localNumber: string, message: string) => {
+		const international = localNumber.replace(/^0/, "20");
+		return `https://wa.me/${international}?text=${encodeURIComponent(message)}`;
 	};
 
 	const handlePhoneSubmit = async (e?: React.SyntheticEvent) => {
@@ -352,33 +359,69 @@ export default function CheckoutFlow({
 							{/* Payment Instructions */}
 							<div className="bg-white border border-stone-200 rounded-4xl p-8 shadow-xl relative overflow-hidden">
 								<div className="absolute top-0 left-0 w-full h-1 bg-linear-to-r from-amber-600 to-emerald-600" />
-
 								<div className="text-center mb-6">
 									<h2 className="text-2xl font-black mt-2 text-amber-900">
 										Awaiting Payment
 									</h2>
+									{orderId && (
+										<p className="text-sm text-stone-500 font-bold mt-1">
+											Order #{orderId}
+										</p>
+									)}
 								</div>
-
 								<div className="space-y-3 my-6">
 									<div className="bg-stone-50 border border-stone-200 rounded-2xl p-4 text-center">
 										<p className="text-xs text-stone-500 font-bold uppercase mb-1">
 											1. Send via InstaPay
 										</p>
 										<p className="text-xl font-black tracking-wider text-amber-900">
-											cafe.instapay
+											{siteConfig.instapay.name}
 										</p>
-									</div>
+										<p className="text-xl font-black tracking-wider text-amber-900">
+											{siteConfig.instapay.number}
+										</p>
+										{siteConfig.instapay.link && (
 
+											<a
+												href={siteConfig.instapay.link}
+												target="_blank"
+												rel="noopener noreferrer"
+												className="inline-flex items-center justify-center gap-2 bg-amber-900 hover:bg-amber-800 text-white font-bold py-2.5 px-5 rounded-xl text-sm transition-transform active:scale-95 mt-3"
+											>
+												<ArrowRight size={16} />
+												Open InstaPay
+											</a>
+										)}
+									</div>
 									<div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 text-center">
 										<p className="text-xs text-emerald-600/70 font-bold uppercase mb-1">
-											2. WhatsApp Receipt & ID
+											2. Send Screenshot & Order ID via WhatsApp
 										</p>
-										<p className="text-xl font-black tracking-wider text-emerald-700">
-											0123 456 7890
+										<p className="text-xl font-black tracking-wider text-emerald-700 mb-2">
+											{siteConfig.contact.phoneNumber}
 										</p>
+										<p className="text-sm text-emerald-700/80 mb-3">
+											After paying, send us a screenshot of the payment along with your
+											Order ID <span className="font-bold">#{orderId}</span> so we can
+											confirm it quickly.
+										</p>
+										{orderId && (
+
+											<a
+												href={buildWhatsAppLink(
+													siteConfig.contact.phoneNumber,
+													`Hi! Here's my payment for Order #${orderId}. I'll attach the screenshot now.`,
+												)}
+												target="_blank"
+												rel="noopener noreferrer"
+												className="inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-5 rounded-xl text-sm transition-transform active:scale-95"
+											>
+												<Phone size={16} />
+												Open WhatsApp
+											</a>
+										)}
 									</div>
 								</div>
-
 								<button
 									onClick={finishProcess}
 									className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-transform active:scale-95 shadow-md"
@@ -387,6 +430,9 @@ export default function CheckoutFlow({
 									I have sent the money
 								</button>
 							</div>
+
+
+
 						</motion.div>
 					)}
 
@@ -411,6 +457,6 @@ export default function CheckoutFlow({
 					)}
 				</AnimatePresence>
 			</div>
-		</motion.div>
+		</motion.div >
 	);
 }
