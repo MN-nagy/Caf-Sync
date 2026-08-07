@@ -14,7 +14,7 @@ export default function ManagerLogin() {
 	const [loading, setLoading] = useState(false);
 	const router = useRouter();
 
-	const handleLogin = async (e: React.FormEvent) => {
+	const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
 		e.preventDefault();
 		setLoading(true);
 		setError("");
@@ -33,8 +33,15 @@ export default function ManagerLogin() {
 				throw new Error(data.message || "Login failed");
 			}
 
-			// Success! Refresh the page so the Next.js Server reads the new cookie
-			router.refresh();
+			// // Success! Refresh the page so the Next.js Server reads the new cookie
+			// router.refresh();
+
+			//NOTE: review before real deployment ""
+			/*
+			in Next.js, router.refresh() does not actually reload the webpage. It silently fetches new data in the background. Because you never call setLoading(false) when it succeeds, the background refresh finishes, but your React component is still sitting there with loading = true. The spinner just spins forever!
+			Furthermore, because of our Vercel (frontend) to Cloudflare (backend) setup, router.refresh() sometimes fails to attach the brand-new cookie to the background request.
+			*/
+			window.location.reload();
 		} catch (err: any) {
 			setError(err.message);
 			setLoading(false);

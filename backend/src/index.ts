@@ -50,6 +50,10 @@ export const io = new Server(httpServer, {
   },
 });
 
+// temp fix for the deployment
+//NOTE: check before real deployment
+app.set("trust proxy", 1);
+
 // middleware
 app.use(
   cors({

@@ -42,10 +42,18 @@ export default function PinPad({ onSuccess }: PinPadProps) {
 				}
 
 				// If rendered inside KitchenClient as a modal, trigger onSuccess callback
+				// if (onSuccess) {
+				// 	onSuccess();
+				// } else {
+				// 	router.refresh();
+				// }
+
+
+				//NOTE: review before real deployment, check ManagerLogin.tsx
 				if (onSuccess) {
 					onSuccess();
 				} else {
-					router.refresh();
+					window.location.reload();
 				}
 			} catch (err: any) {
 				setError(err.message);
