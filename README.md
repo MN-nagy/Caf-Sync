@@ -2,7 +2,7 @@
 
 Real-time ordering and kitchen management system for cafés. Customers order via QR code (dine-in) or for pickup, kitchen staff manage the order queue on a live display, and the manager gets an admin dashboard for the menu, tables, stats, and store settings — all synced instantly over WebSockets.
 
-> Status: pre-launch / in development. Not yet deployed to production.
+> Status: v1.0.0
 
 ## Features
 
@@ -111,4 +111,4 @@ frontend/
 
 ## License
 
-Proprietary — All Rights Reserved. See [LICENSE](./LICENSE)..
+See [LICENSE](./LICENSE)..
