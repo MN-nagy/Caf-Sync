@@ -111,4 +111,4 @@ frontend/
 
 ## License
 
-Proprietary — All Rights Reserved. See [LICENSE](./LICENSE). This repository is not open source; no license is granted to copy, modify, or distribute this code.
+Proprietary — All Rights Reserved. See [LICENSE](./LICENSE)..
