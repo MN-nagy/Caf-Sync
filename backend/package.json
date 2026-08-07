@@ -9,8 +9,8 @@
     "start": "tsx src/index.ts"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "author": "Mahmoud Nagy/ MN-nagy",
+  "license": "MIT",
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
     "bcrypt": "^6.0.0",

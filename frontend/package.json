@@ -8,6 +8,8 @@
     "start": "next start",
     "lint": "eslint"
   },
+  "author": "Mahmoud Nagy/ MN-nagy",
+  "license": "MIT",
   "dependencies": {
     "framer-motion": "^12.42.2",
     "lucide-react": "^1.27.0",
