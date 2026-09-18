@@ -111,4 +111,4 @@ frontend/
 
 ## License
 
-See [LICENSE](./LICENSE)..
+MIT License
